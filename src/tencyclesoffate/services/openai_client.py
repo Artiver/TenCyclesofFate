@@ -1,0 +1,404 @@
+import re
+import logging
+
+from openai import AsyncOpenAI, APIError
+
+from ..core.config import settings
+import asyncio
+import random
+import json
+import time
+from collections import deque
+
+# --- Logging ---
+logger = logging.getLogger(__name__)
+
+# --- 用户并发限制 ---
+MAX_CONCURRENT_REQUESTS_PER_USER = 2
+_user_semaphores: dict[str, asyncio.Semaphore] = {}
+_semaphore_lock = asyncio.Lock()
+
+
+async def _get_user_semaphore(user_id: str) -> asyncio.Semaphore:
+    """获取用户的信号量，如果不存在则创建"""
+    async with _semaphore_lock:
+        if user_id not in _user_semaphores:
+            _user_semaphores[user_id] = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS_PER_USER)
+        return _user_semaphores[user_id]
+
+
+class UserConcurrencyLimitExceeded(Exception):
+    """用户并发请求超限异常"""
+    pass
+
+# --- 全局图片生成频率限制（所有用户共享）---
+# 每 10 分钟最多生成 10 张图（默认值可通过 settings 覆盖）。
+_global_image_gen_lock = asyncio.Lock()
+_global_image_gen_timestamps: deque[float] = deque()
+_time_now = time.monotonic  # overridable for tests
+
+
+class GlobalImageRateLimitExceeded(Exception):
+    """全局图片生成频率限制异常（所有用户共享）"""
+
+    def __init__(self, retry_after_seconds: float | None = None):
+        super().__init__("全局图片生成频率已达上限")
+        self.retry_after_seconds = retry_after_seconds
+
+
+async def _try_acquire_global_image_quota(count: int = 1) -> tuple[bool, float | None]:
+    """
+    尝试占用全局图片生成配额（滑动窗口）。
+
+    Returns:
+        (ok, retry_after_seconds)
+    """
+    if count <= 0:
+        return True, None
+
+    window_seconds = max(1, int(settings.IMAGE_GEN_GLOBAL_WINDOW_SECONDS))
+    limit = max(1, int(settings.IMAGE_GEN_GLOBAL_LIMIT))
+    now = _time_now()
+
+    async with _global_image_gen_lock:
+        # 清理窗口外的记录
+        while _global_image_gen_timestamps and (now - _global_image_gen_timestamps[0]) > window_seconds:
+            _global_image_gen_timestamps.popleft()
+
+        if len(_global_image_gen_timestamps) + count > limit:
+            # 计算下一次可用的时间点（基于窗口内最早的一张）
+            if _global_image_gen_timestamps:
+                oldest = _global_image_gen_timestamps[0]
+                retry_after = max(0.0, window_seconds - (now - oldest))
+            else:
+                retry_after = float(window_seconds)
+            return False, retry_after
+
+        for _ in range(count):
+            _global_image_gen_timestamps.append(now)
+        return True, None
+
+# --- Client Initialization ---
+client: AsyncOpenAI | None = None
+if AsyncOpenAI is None:
+    logger.warning("未安装 openai 依赖，OpenAI 客户端不可用。")
+elif settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "your_openai_api_key_here":
+    try:
+        client = AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL,
+        )
+        logger.info("OpenAI 客户端初始化成功。")
+    except Exception as e:
+        logger.error(f"初始化 OpenAI 客户端失败: {e}")
+        client = None
+else:
+    logger.warning("OPENAI_API_KEY 未设置或为占位符，OpenAI 客户端未初始化。")
+
+# --- Image Generation Client ---
+image_client: AsyncOpenAI | None = None
+if AsyncOpenAI is None:
+    image_client = None
+elif settings.IMAGE_GEN_MODEL:
+    try:
+        image_api_key = settings.IMAGE_GEN_API_KEY or settings.OPENAI_API_KEY
+        image_base_url = settings.IMAGE_GEN_BASE_URL or settings.OPENAI_BASE_URL
+        if image_api_key and image_api_key != "your_openai_api_key_here":
+            image_client = AsyncOpenAI(
+                api_key=image_api_key,
+                base_url=image_base_url,
+            )
+            logger.info(f"图片生成客户端初始化成功，模型: {settings.IMAGE_GEN_MODEL}")
+        else:
+            logger.warning("图片生成API密钥未设置，图片生成功能禁用。")
+    except Exception as e:
+        logger.error(f"初始化图片生成客户端失败: {e}")
+        image_client = None
+else:
+    logger.info("IMAGE_GEN_MODEL 未配置，图片生成功能禁用。")
+
+
+def _extract_json_from_response(response_str: str) -> str | None:
+    if "```json" in response_str:
+        start_pos = response_str.find("```json") + 7
+        end_pos = response_str.find("```", start_pos)
+        if end_pos != -1:
+            return response_str[start_pos:end_pos].strip()
+    start_pos = response_str.find("{")
+    end_pos = response_str.rfind("}")
+    if start_pos != -1 and end_pos != -1 and end_pos > start_pos:
+        return response_str[start_pos : end_pos + 1].strip()
+    return None
+
+
+# --- Core Function ---
+async def get_ai_response(
+    prompt: str,
+    history: list[dict] | None = None,
+    model=settings.OPENAI_MODEL,
+    force_json=True,
+    user_id: str | None = None,
+) -> str:
+    """
+    从 OpenAI API 获取响应。
+
+    Args:
+        prompt: 用户的提示。
+        history: 对话的先前消息列表。
+        model: 使用的模型。
+        force_json: 是否强制返回JSON格式。
+        user_id: 用户ID，用于并发限制。
+
+    Returns:
+        AI 的响应消息，或错误字符串。
+    """
+    if not client:
+        return "错误：OpenAI客户端未初始化。请在 backend/.env 文件中正确设置您的 OPENAI_API_KEY。"
+    
+    # 用户并发限制
+    if user_id:
+        semaphore = await _get_user_semaphore(user_id)
+        if semaphore.locked() and semaphore._value == 0:
+            # 检查是否能立即获取，如果不能则说明已达上限
+            try:
+                # 尝试非阻塞获取
+                acquired = semaphore.locked()
+            except:
+                acquired = False
+        # 使用信号量包装后续逻辑
+        async with semaphore:
+            logger.debug(f"用户 {user_id} 获取LLM请求槽位，当前可用: {semaphore._value}")
+            return await _get_ai_response_impl(prompt, history, model, force_json)
+    else:
+        return await _get_ai_response_impl(prompt, history, model, force_json)
+
+
+async def _get_ai_response_impl(
+    prompt: str,
+    history: list[dict] | None = None,
+    model=settings.OPENAI_MODEL,
+    force_json=True,
+) -> str:
+    """实际执行AI请求的内部函数"""
+
+    messages = []
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": prompt})
+
+    total_tokens = sum(len(m["content"]) for m in messages)
+    logger.debug(f"发送到OpenAI的消息总令牌数: {total_tokens}")
+
+    # 如果 token 过多，在 messages 副本上删除，不影响原始 history
+    _max_loop = 10000
+    while total_tokens > 100000 and _max_loop > 0:
+        if len(messages) <= 2:  # 至少保留 system 和当前 user 消息
+            break
+        random_id = random.randint(1, len(messages) - 2)  # 不删除第一条和最后一条
+        total_tokens -= len(messages[random_id]["content"])
+        messages.pop(random_id)
+        _max_loop -= 1
+
+    if _max_loop == 0:
+        raise ValueError("对话历史过长，无法通过删除消息节省足够的令牌。")
+
+    max_retries = 7
+    base_delay = 1  # 基础延迟时间（秒）
+
+    for attempt in range(max_retries):
+        _model = model
+        if "," in model:
+            model_options = [m.strip() for m in model.split(",") if m.strip()]
+            if model_options:
+                if attempt == 0:
+                    _model = model_options[0]
+                    logger.debug(f"首次尝试使用模型: {_model}")
+                else:
+                    _model = random.choice(model_options)
+                    logger.debug(f"从列表中选择模型: {_model}")
+        try:
+            response = await client.chat.completions.create(
+                model=_model, messages=messages
+            )
+            ai_message = response.choices[0].message.content
+            if not ai_message:
+                raise ValueError("AI 响应为空")
+            ret = ai_message.strip()
+            if "<think>" in ret and "</think>" in ret:
+                ret = ret[ret.rfind("</think>") + 8 :].strip()
+
+            if force_json:
+                try:
+                    json_part = json.loads(_extract_json_from_response(ret))
+                    if json_part:
+                        return ret
+                    else:
+                        raise ValueError("未找到有效的JSON部分")
+                except Exception as e:
+                    raise ValueError(f"解析AI响应时出错: {e}")
+            else:
+                return ret
+
+        except APIError as e:
+            logger.error(f"OpenAI API 错误 (尝试 {attempt + 1}/{max_retries}): {e}")
+            if attempt == max_retries - 1:
+                return f"错误：AI服务出现问题。详情: {e}"
+
+            # 指数退避延迟
+            delay = base_delay * (2**attempt) + random.uniform(0, 1)
+            await asyncio.sleep(delay)
+
+        except Exception as e:
+            logger.error(
+                f"联系OpenAI时发生意外错误 (尝试 {attempt + 1}/{max_retries}): {e}"
+            )
+            logger.error("错误详情：", exc_info=True)
+            if attempt == max_retries - 1:
+                return f"错误：发生意外错误。详情: {e}"
+
+            # 指数退避延迟
+            delay = base_delay * (2**attempt) + random.uniform(0, 1)
+            await asyncio.sleep(delay)
+
+
+
+# --- Image Generation ---
+def is_image_gen_enabled() -> bool:
+    """检查图片生成功能是否启用"""
+    return image_client is not None and settings.IMAGE_GEN_MODEL is not None
+
+
+async def generate_image(scene_prompt: str, user_id: str | None = None) -> str | None:
+    """
+    使用 OAI chat 格式请求生成图片。
+    
+    Args:
+        scene_prompt: 包含游戏状态和最新场景的提示词
+        user_id: 用户ID，用于并发限制
+        
+    Returns:
+        生成的图片 base64 data URL，格式如 "data:image/jpeg;base64,..."
+        如果失败返回 None
+    """
+    if not image_client or not settings.IMAGE_GEN_MODEL:
+        logger.warning("图片生成客户端未初始化，跳过图片生成。")
+        return None
+    
+    if not scene_prompt:
+        logger.warning("没有提供提示词，跳过图片生成。")
+        return None
+    
+    # 用户并发限制
+    if user_id:
+        semaphore = await _get_user_semaphore(user_id)
+        async with semaphore:
+            logger.debug(f"用户 {user_id} 获取图片生成请求槽位，当前可用: {semaphore._value}")
+            return await _generate_image_impl(scene_prompt)
+    else:
+        return await _generate_image_impl(scene_prompt)
+
+
+async def _generate_image_impl(scene_prompt: str) -> str | None:
+    """实际执行图片生成的内部函数"""
+    ok, retry_after = await _try_acquire_global_image_quota(1)
+    if not ok:
+        logger.warning(
+            "全局图片生成频率已达上限：%s 秒后再试（窗口=%ss, 上限=%s）",
+            round(retry_after or 0.0, 2),
+            settings.IMAGE_GEN_GLOBAL_WINDOW_SECONDS,
+            settings.IMAGE_GEN_GLOBAL_LIMIT,
+        )
+        return None
+    
+    # 构建图片生成的提示词，使用XML标签包裹输入内容
+    image_prompt = f"""根据以下场景生成一张插画：
+
+<scene_description>
+{scene_prompt}
+</scene_description>
+
+<requirements>
+- 横版构图（16:9）
+- 画风：现代流行的二次元游戏插画风格，参考《原神》《崩坏：星穹铁道》《明日方舟》等当代热门游戏的美术风格（但是不要打出对应的文字）
+- 高饱和度色彩，强烈的光影对比，带有霓虹光效、粒子特效等现代视觉元素
+- 精致的人物立绘，细腻的面部表情和动态姿势
+- 背景层次丰富，融合东方仙侠元素与现代审美
+- 整体画面要有"氪金手游"级别的精美感和视觉冲击力
+- 忠实反映场景中人物的状态、动作和情绪
+- 只生成当前叙事场景本身，不要生成游戏UI、菜单、按钮、文字说明、对话框、待选选项或任何选项编号/选项文字
+</requirements>
+
+<protagonist_design>
+主角形象必须严格按照 scene_description 中 current_life 里的以下字段绘制：
+- 性别：参照"性别"字段
+- 外貌：参照"外貌"字段的详细描述（面容、发型、体态等）
+- 服饰：参照"服饰"字段的描述
+- 如果场景中没有这些字段，则默认绘制一位身着白色道袍、气质飘逸的年轻修仙者
+</protagonist_design>
+
+<content_policy>
+必须严格遵守以下安全与尺度要求（高优先级，任何情况下都不得违反）：
+
+【绝对禁止 / 0容忍】
+- 任何裸露或可见露点（含“若隐若现”、透视材质、湿透贴身、走光视角）
+- 任何明确或强烈的性暗示内容：挑逗姿势、性行为/性器官描绘、体液、性玩具、BDSM/束缚等
+- 任何未成年人或疑似未成年人相关的性感化/裸露（出现即视为违规）
+- 以胸/臀/裆为中心的镜头语言（低角度特写、刻意突出身体曲线、夸张乳沟/臀沟）
+- 内衣/情趣服装/开裆设计等成人向服装元素
+
+【允许但需克制】
+- 轻度浪漫与“英气/优雅/魅力”气质可以表达，但必须以剧情氛围、表情、动作张力为主
+- 服装可以修身、有层次与质感（战袍、礼服、制服、轻甲、道袍等），但必须“完整遮蔽关键部位”，避免超短、深V到夸张程度、透明薄纱
+- 受伤/战斗可表现（破损衣角、尘土、少量血痕），但不出现内脏、断肢、极端血腥
+
+【替代方案：保证表现力但不越界（优先采用）】
+- 镜头：电影感构图、对角线动态、强光影、背光轮廓、近景情绪特写（不聚焦敏感部位）
+- 情绪：坚毅、悲悯、怒意、惊惧、决绝、沉静等；通过眼神、手部动作、姿态传达张力
+- 服装：飘带、披风、层叠衣襟、铠甲片、纹样刺绣、发饰法器；用“华丽与质感”替代“裸露”
+- 氛围：灵气流动、符文粒子、雾气、雨雪、霓虹光效、法阵光纹增强视觉冲击
+
+输出应适合大众平台展示（PG-13），宁可偏保守也不要擦边。
+</content_policy>"""
+
+    try:
+        logger.info(f"开始生成图片，提示词长度: {len(scene_prompt)}")
+        
+        response = await image_client.chat.completions.create(
+            model=settings.IMAGE_GEN_MODEL,
+            messages=[
+                {"role": "user", "content": image_prompt}
+            ]
+        )
+        
+        ai_message = response.choices[0].message.content
+        if not ai_message:
+            logger.warning("图片生成响应为空")
+            return None
+        
+        # 从响应中提取 base64 图片
+        # 格式: [Generated Image](data:image/jpeg;base64,/...)
+        pattern = r'\[Generated Image\]\((data:image/[^;]+;base64,[^)]+)\)'
+        match = re.search(pattern, ai_message)
+        
+        if match:
+            image_data_url = match.group(1)
+            logger.info("图片生成成功")
+            return image_data_url
+        else:
+            # 尝试直接匹配 data:image 格式
+            pattern2 = r'(data:image/[^;]+;base64,[A-Za-z0-9+/=]+)'
+            match2 = re.search(pattern2, ai_message)
+            if match2:
+                image_data_url = match2.group(1)
+                logger.info("图片生成成功（直接匹配）")
+                return image_data_url
+            
+            logger.warning(f"未能从响应中提取图片，响应内容: {ai_message[:200]}...")
+            return None
+            
+    except APIError as e:
+        logger.error(f"图片生成 API 错误: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"图片生成时发生意外错误: {e}", exc_info=True)
+        return None

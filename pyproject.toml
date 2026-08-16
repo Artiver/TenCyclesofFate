@@ -1,0 +1,29 @@
+[project]
+name = "tencyclesoffate"
+version = "0.1.0"
+description = "浮生十梦，天道轮回"
+readme = "README.md"
+authors = [
+    { name = "Artiver", email = "artiver@foxmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "fastapi>=0.141.1",
+    "ijson>=3.5.1",
+    "jsonpatch>=1.33",
+    "libpass[bcrypt]>=1.9.3",
+    "mysql-connector-python>=26.7.0",
+    "openai>=3.1.0",
+    "pydantic-settings>=2.15.0",
+    "python-jose[cryptography]>=3.5.0",
+    "uvicorn[standard]>=0.52.3",
+    "websockets>=17.0.1",
+]
+
+[project.scripts]
+project = "tencyclesoffate:run"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
