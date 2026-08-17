@@ -48,7 +48,73 @@ const DOMElements = {
     rollResultDisplay: document.getElementById('roll-result-display'),
     rollOutcome: document.getElementById('roll-outcome'),
     rollValue: document.getElementById('roll-value'),
+    modalOverlay: document.getElementById('modal-overlay'),
+    modalTitle: document.getElementById('modal-title'),
+    modalMessage: document.getElementById('modal-message'),
+    modalConfirmButton: document.getElementById('modal-confirm-button'),
+    modalCancelButton: document.getElementById('modal-cancel-button'),
 };
+
+// --- Themed Modal (replaces native alert/confirm) ---
+const modalManager = {
+    resolvePromise: null,
+    closeTimeout: null,
+
+    open(message, { confirm = false, title = '天机所示' } = {}) {
+        DOMElements.modalTitle.textContent = title;
+        DOMElements.modalMessage.textContent = message;
+        DOMElements.modalConfirmButton.textContent = confirm ? '确定' : '知晓';
+        DOMElements.modalCancelButton.classList.toggle('hidden', !confirm);
+        DOMElements.modalOverlay.classList.remove('hidden');
+        DOMElements.modalOverlay.classList.remove('modal-closing');
+        DOMElements.modalOverlay.setAttribute('aria-hidden', 'false');
+        DOMElements.modalConfirmButton.focus();
+        return new Promise(resolve => { this.resolvePromise = resolve; });
+    },
+
+    close(result) {
+        const overlay = DOMElements.modalOverlay;
+        overlay.classList.add('modal-closing');
+        overlay.setAttribute('aria-hidden', 'true');
+        clearTimeout(this.closeTimeout);
+        this.closeTimeout = setTimeout(() => {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('modal-closing');
+        }, 200);
+        if (this.resolvePromise) {
+            this.resolvePromise(result);
+            this.resolvePromise = null;
+        }
+    },
+};
+
+function showAlert(message, options = {}) {
+    return modalManager.open(message, options);
+}
+
+function showConfirm(message, options = {}) {
+    return modalManager.open(message, { ...options, confirm: true });
+}
+
+function setupModalEventListeners() {
+    DOMElements.modalConfirmButton.addEventListener('click', () => modalManager.close(true));
+    DOMElements.modalCancelButton.addEventListener('click', () => modalManager.close(false));
+    DOMElements.modalOverlay.addEventListener('click', (e) => {
+        if (e.target === DOMElements.modalOverlay && DOMElements.modalCancelButton) {
+            // 点击遮罩：有取消按钮时视为取消，否则视为确认
+            modalManager.close(!DOMElements.modalCancelButton.classList.contains('hidden'));
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (DOMElements.modalOverlay.classList.contains('hidden')) return;
+        if (e.key === 'Enter') {
+            modalManager.close(true);
+        } else if (e.key === 'Escape') {
+            const hasCancel = !DOMElements.modalCancelButton.classList.contains('hidden');
+            modalManager.close(!hasCancel);
+        }
+    });
+}
 
 // --- API Client ---
 const api = {
@@ -171,7 +237,7 @@ const socketManager = {
                         }
                         break;
                     case 'error':
-                        alert(`WebSocket Error: ${message.detail}`);
+                        showAlert(`WebSocket Error: ${message.detail}`, { title: '连接异常' });
                         break;
                 }
             };
@@ -183,7 +249,7 @@ const socketManager = {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify({ action }));
         } else {
-            alert("连接已断开，请刷新。");
+            showAlert("连接已断开，请刷新。", { title: '连接异常' });
         }
     }
 };
@@ -515,31 +581,31 @@ async function handleSave() {
     if (appState.gameState && appState.gameState.is_processing) return;
     const hasSave = appState.saveInfo && appState.saveInfo.has_save;
     const message = hasSave ? '已有存档，确定覆盖吗？' : '确定保存当前进度吗？';
-    if (!confirm(message)) return;
+    if (!(await showConfirm(message))) return;
     try {
         const result = await api.saveGame();
         appState.saveInfo = result;
         updateSaveButtons();
-        alert('存档成功');
+        await showAlert('存档成功');
     } catch (error) {
-        alert(error.message);
+        showAlert(error.message);
     }
 }
 
 async function handleLoad() {
     if (appState.gameState && appState.gameState.is_processing) return;
     if (!appState.saveInfo || !appState.saveInfo.has_save) {
-        alert('暂无存档');
+        showAlert('暂无存档');
         return;
     }
-    if (!confirm('读档将覆盖当前进度，确定继续吗？')) return;
+    if (!(await showConfirm('读档将覆盖当前进度，确定继续吗？'))) return;
     try {
         const state = await api.loadGame();
         appState.gameState = state;
         render();
-        alert('读档成功');
+        await showAlert('读档成功');
     } catch (error) {
-        alert(error.message);
+        showAlert(error.message);
     }
 }
 
@@ -659,6 +725,9 @@ function init() {
     DOMElements.actionButton.addEventListener('click', () => handleAction());
     DOMElements.actionInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAction(); });
     DOMElements.startTrialButton.addEventListener('click', () => handleAction("开始试炼"));
+
+    // Setup themed modal event listeners
+    setupModalEventListeners();
 }
 
 // --- Start the App ---

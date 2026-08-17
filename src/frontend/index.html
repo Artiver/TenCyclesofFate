@@ -100,6 +100,18 @@
             </div>
         </div>
     </div>
+
+    <!-- Themed Modal (replaces native alert/confirm) -->
+    <div id="modal-overlay" class="hidden" aria-hidden="true">
+        <div id="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-message">
+            <p id="modal-title">天机所示</p>
+            <p id="modal-message"></p>
+            <div id="modal-actions">
+                <button id="modal-confirm-button" class="modal-button modal-confirm" type="button">确定</button>
+                <button id="modal-cancel-button" class="modal-button modal-cancel hidden" type="button">取消</button>
+            </div>
+        </div>
+    </div>
     <script type="module" src="index.js"></script>
 </body>
 
