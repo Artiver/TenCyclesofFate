@@ -4,6 +4,7 @@ const API_BASE_URL = "/api";
 // --- State Management ---
 const appState = {
     gameState: null,
+    saveInfo: null,  // { has_save, saved_at, session_date }
     lastRollEventId: null,  // 用于检测骰子事件变化
 };
 
@@ -27,6 +28,8 @@ const DOMElements = {
     authToggleButton: document.getElementById('auth-toggle-button'),
     loginError: document.getElementById('login-error'),
     logoutButton: document.getElementById('logout-button'),
+    saveButton: document.getElementById('save-button'),
+    loadButton: document.getElementById('load-button'),
     sceneBackgroundImage: document.getElementById('scene-background-image'),
     statusToggleButton: document.getElementById('status-toggle-button'),
     statusCloseButton: document.getElementById('status-close-button'),
@@ -87,7 +90,31 @@ const api = {
     async logout() {
         await fetch(`${API_BASE_URL}/logout`, { method: 'POST' });
         window.location.href = '/';
-    }
+    },
+    async saveGame() {
+        const response = await fetch(`${API_BASE_URL}/game/save`, { method: 'POST' });
+        if (response.status === 409) {
+            const err = await response.json().catch(() => ({ detail: '正在处理中，暂无法存档' }));
+            throw new Error(err.detail || '正在处理中，暂无法存档');
+        }
+        if (!response.ok) throw new Error('存档失败');
+        return response.json();
+    },
+    async loadGame() {
+        const response = await fetch(`${API_BASE_URL}/game/load`, { method: 'POST' });
+        if (response.status === 409) {
+            const err = await response.json().catch(() => ({ detail: '正在处理中，暂无法读档' }));
+            throw new Error(err.detail || '正在处理中，暂无法读档');
+        }
+        if (response.status === 404) throw new Error('暂无存档');
+        if (!response.ok) throw new Error('读档失败');
+        return response.json();
+    },
+    async getSaveInfo() {
+        const response = await fetch(`${API_BASE_URL}/game/save`);
+        if (!response.ok) throw new Error('获取存档信息失败');
+        return response.json();
+    },
 };
 
 // --- WebSocket Manager ---
@@ -312,6 +339,7 @@ function showLoading(isLoading) {
 function render() {
     if (!appState.gameState) { showLoading(true); return; }
     showLoading(appState.gameState.is_processing);
+    updateSaveButtons();
     DOMElements.opportunitiesSpan.textContent = appState.gameState.opportunities_remaining;
     renderCharacterStatus();
 
@@ -473,6 +501,48 @@ function initializeStatusPanelLayout() {
     setStatusPanelCollapsed(window.matchMedia('(max-width: 850px)').matches);
 }
 
+// --- Save / Load Management ---
+function updateSaveButtons() {
+    const isProcessing = !!(appState.gameState && appState.gameState.is_processing);
+    const hasSave = !!(appState.saveInfo && appState.saveInfo.has_save);
+
+    DOMElements.saveButton.disabled = isProcessing;
+    DOMElements.loadButton.disabled = isProcessing || !hasSave;
+    DOMElements.saveButton.textContent = hasSave ? '覆盖存档' : '存档';
+}
+
+async function handleSave() {
+    if (appState.gameState && appState.gameState.is_processing) return;
+    const hasSave = appState.saveInfo && appState.saveInfo.has_save;
+    const message = hasSave ? '已有存档，确定覆盖吗？' : '确定保存当前进度吗？';
+    if (!confirm(message)) return;
+    try {
+        const result = await api.saveGame();
+        appState.saveInfo = result;
+        updateSaveButtons();
+        alert('存档成功');
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function handleLoad() {
+    if (appState.gameState && appState.gameState.is_processing) return;
+    if (!appState.saveInfo || !appState.saveInfo.has_save) {
+        alert('暂无存档');
+        return;
+    }
+    if (!confirm('读档将覆盖当前进度，确定继续吗？')) return;
+    try {
+        const state = await api.loadGame();
+        appState.gameState = state;
+        render();
+        alert('读档成功');
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
 // --- Event Handlers ---
 function handleLogout() {
     api.logout();
@@ -542,6 +612,11 @@ async function initializeGame() {
     try {
         const initialState = await api.initGame();
         appState.gameState = initialState;
+        try {
+            appState.saveInfo = await api.getSaveInfo();
+        } catch (e) {
+            appState.saveInfo = null;
+        }
         render();
         showView('game-view');
         await socketManager.connect();
@@ -576,6 +651,8 @@ function init() {
 
     // Setup event listeners regardless of initial view
     DOMElements.logoutButton.addEventListener('click', handleLogout);
+    DOMElements.saveButton.addEventListener('click', handleSave);
+    DOMElements.loadButton.addEventListener('click', handleLoad);
     DOMElements.statusToggleButton.addEventListener('click', toggleStatusPanel);
     DOMElements.statusCloseButton.addEventListener('click', () => setStatusPanelCollapsed(true));
     DOMElements.statusRailButton.addEventListener('click', () => setStatusPanelCollapsed(false));

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import OrderedDict
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 DATA_DIR = Path("game_data")
 SESSIONS_DIR = DATA_DIR / "sessions"
+SAVES_DIR = DATA_DIR / "saves"
 INDEX_FILE = DATA_DIR / "index.json"
 OLD_DATA_FILE = Path("game_data.json")  # 旧数据文件，用于迁移
 
@@ -39,6 +41,12 @@ def _get_session_dir(player_id: str) -> Path:
 
 def _get_meta_path(player_id: str) -> Path:
     return _get_session_dir(player_id) / "meta.json"
+
+
+def _get_save_path(player_id: str) -> Path:
+    """获取玩家存档文件路径（单槽位，一个账户一个存档）"""
+    safe_id = player_id.replace("/", "_").replace("\\", "_")
+    return SAVES_DIR / f"{safe_id}.json"
 
 
 def _get_internal_history_path(player_id: str) -> Path:
@@ -335,6 +343,7 @@ async def _async_init():
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        SAVES_DIR.mkdir(parents=True, exist_ok=True)
         logger.info(f"数据目录: {DATA_DIR.absolute()}")
     except Exception as e:
         logger.error(f"创建数据目录失败: {e}", exc_info=True)
@@ -578,3 +587,66 @@ async def flag_player_for_punishment(player_id: str, level: str, reason: str):
     }
     await save_session(player_id, session)
     logger.info(f"玩家 {player_id} 被标记为 {level} 惩罚，原因: {reason}")
+
+
+# --- 存档 / 读档 ---
+async def save_game_snapshot(player_id: str, session: dict) -> dict:
+    """
+    将当前会话快照保存到玩家唯一存档槽位。
+    再次调用即覆盖已有存档。返回存档信息。
+    """
+    snapshot = deepcopy(session)
+
+    # 剔除瞬时/派生字段
+    snapshot.pop("roll_event", None)
+    snapshot.pop("last_modified", None)
+    snapshot["is_processing"] = False
+
+    # 依据实际历史数组重设计数，保证一致性
+    snapshot["internal_history_count"] = len(snapshot.get("internal_history", []))
+    snapshot["display_history_count"] = len(snapshot.get("display_history", []))
+
+    snapshot["saved_at"] = time.time()
+    await _write_json_file(_get_save_path(player_id), snapshot)
+    logger.info(f"玩家 {player_id} 已存档")
+    return {
+        "has_save": True,
+        "saved_at": snapshot["saved_at"],
+        "session_date": snapshot.get("session_date"),
+    }
+
+
+async def get_save_info(player_id: str) -> dict:
+    """查询玩家存档信息（是否存在、存档时间、存档所属日期）"""
+    data = await _read_json_file(_get_save_path(player_id))
+    if not data:
+        return {"has_save": False}
+    return {
+        "has_save": True,
+        "saved_at": data.get("saved_at"),
+        "session_date": data.get("session_date"),
+    }
+
+
+async def load_game_snapshot(player_id: str) -> dict | None:
+    """
+    从存档恢复会话并覆盖当前进度。
+    返回恢复后的完整会话，无存档时返回 None。
+    """
+    data = await _read_json_file(_get_save_path(player_id))
+    if not data:
+        logger.warning(f"玩家 {player_id} 尝试读档但无存档")
+        return None
+
+    data.pop("saved_at", None)
+    data["is_processing"] = False
+    data["roll_event"] = None
+
+    # 依据实际历史数组重设计数，防止旧存档计数不一致
+    data["internal_history_count"] = len(data.get("internal_history", []))
+    data["display_history_count"] = len(data.get("display_history", []))
+
+    # 覆盖写为当前会话（save_session 会自动推送 full_state 到前端）
+    await save_session(player_id, data)
+    logger.info(f"玩家 {player_id} 已读档")
+    return data

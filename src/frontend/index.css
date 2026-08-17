@@ -270,6 +270,17 @@ body.has-scene-background #action-area {
     color: var(--accent-color);
 }
 
+.header-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.header-button:disabled:hover {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+
 #game-status {
     display: flex;
     align-items: center;
