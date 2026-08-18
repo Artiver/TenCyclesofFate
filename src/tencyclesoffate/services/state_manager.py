@@ -3,7 +3,7 @@ import json
 import logging
 import time
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from collections import OrderedDict
 from typing import Any
@@ -641,6 +641,9 @@ async def load_game_snapshot(player_id: str) -> dict | None:
     data.pop("saved_at", None)
     data["is_processing"] = False
     data["roll_event"] = None
+
+    # 读档视为今日会话，刷新时不被每日重置逻辑清掉
+    data["session_date"] = date.today().isoformat()
 
     # 依据实际历史数组重设计数，防止旧存档计数不一致
     data["internal_history_count"] = len(data.get("internal_history", []))
