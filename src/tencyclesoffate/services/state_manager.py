@@ -648,5 +648,10 @@ async def load_game_snapshot(player_id: str) -> dict | None:
 
     # 覆盖写为当前会话（save_session 会自动推送 full_state 到前端）
     await save_session(player_id, data)
+
+    # 将存档历史强制复制回 jsonl 文件，覆盖当前内容，保证与存档一致
+    await _write_jsonl_file(_get_internal_history_path(player_id), data.get("internal_history", []))
+    await _write_jsonl_file(_get_display_history_path(player_id), data.get("display_history", []))
+
     logger.info(f"玩家 {player_id} 已读档")
     return data
