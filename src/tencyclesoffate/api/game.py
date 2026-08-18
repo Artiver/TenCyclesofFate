@@ -73,3 +73,21 @@ async def load_game(
             detail="暂无存档",
         )
     return restored
+
+
+@router.delete("/game/save")
+async def delete_save(
+    current_user: Annotated[dict, Depends(get_current_active_user)],
+):
+    """
+    Deletes the player's save slot.
+    The current session remains unchanged.
+    """
+    player_id = current_user["username"]
+    save_info = await state_manager.get_save_info(player_id)
+    if not save_info["has_save"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="暂无存档",
+        )
+    return await state_manager.delete_game_snapshot(player_id)

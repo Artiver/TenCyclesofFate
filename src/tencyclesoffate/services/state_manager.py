@@ -628,6 +628,17 @@ async def get_save_info(player_id: str) -> dict:
     }
 
 
+async def delete_game_snapshot(player_id: str) -> dict:
+    """删除玩家存档。返回更新后的存档信息。"""
+    save_path = _get_save_path(player_id)
+    if save_path.exists():
+        save_path.unlink()
+        logger.info(f"玩家 {player_id} 的存档已删除")
+    else:
+        logger.info(f"玩家 {player_id} 尝试删除存档但无存档")
+    return {"has_save": False}
+
+
 async def load_game_snapshot(player_id: str) -> dict | None:
     """
     从存档恢复会话并覆盖当前进度。

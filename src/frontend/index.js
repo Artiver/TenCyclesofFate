@@ -30,6 +30,7 @@ const DOMElements = {
     logoutButton: document.getElementById('logout-button'),
     saveButton: document.getElementById('save-button'),
     loadButton: document.getElementById('load-button'),
+    deleteSaveButton: document.getElementById('delete-save-button'),
     sceneBackgroundImage: document.getElementById('scene-background-image'),
     statusToggleButton: document.getElementById('status-toggle-button'),
     statusCloseButton: document.getElementById('status-close-button'),
@@ -179,6 +180,12 @@ const api = {
     async getSaveInfo() {
         const response = await fetch(`${API_BASE_URL}/game/save`);
         if (!response.ok) throw new Error('获取存档信息失败');
+        return response.json();
+    },
+    async deleteSave() {
+        const response = await fetch(`${API_BASE_URL}/game/save`, { method: 'DELETE' });
+        if (response.status === 404) throw new Error('暂无存档');
+        if (!response.ok) throw new Error('删除存档失败');
         return response.json();
     },
 };
@@ -574,6 +581,7 @@ function updateSaveButtons() {
 
     DOMElements.saveButton.disabled = isProcessing;
     DOMElements.loadButton.disabled = isProcessing || !hasSave;
+    DOMElements.deleteSaveButton.disabled = isProcessing || !hasSave;
     DOMElements.saveButton.textContent = hasSave ? '覆盖存档' : '存档';
 }
 
@@ -604,6 +612,23 @@ async function handleLoad() {
         appState.gameState = state;
         render();
         await showAlert('读档成功');
+    } catch (error) {
+        showAlert(error.message);
+    }
+}
+
+async function handleDelete() {
+    if (appState.gameState && appState.gameState.is_processing) return;
+    if (!appState.saveInfo || !appState.saveInfo.has_save) {
+        showAlert('暂无存档');
+        return;
+    }
+    if (!(await showConfirm('确定删除存档吗？此操作不可恢复。'))) return;
+    try {
+        const result = await api.deleteSave();
+        appState.saveInfo = result;
+        updateSaveButtons();
+        await showAlert('存档已删除');
     } catch (error) {
         showAlert(error.message);
     }
@@ -719,6 +744,7 @@ function init() {
     DOMElements.logoutButton.addEventListener('click', handleLogout);
     DOMElements.saveButton.addEventListener('click', handleSave);
     DOMElements.loadButton.addEventListener('click', handleLoad);
+    DOMElements.deleteSaveButton.addEventListener('click', handleDelete);
     DOMElements.statusToggleButton.addEventListener('click', toggleStatusPanel);
     DOMElements.statusCloseButton.addEventListener('click', () => setStatusPanelCollapsed(true));
     DOMElements.statusRailButton.addEventListener('click', () => setStatusPanelCollapsed(false));
