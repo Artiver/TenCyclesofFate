@@ -41,6 +41,21 @@ class ConnectionManager:
             self._pending_updates.pop(player_id, None)
             logger.info(f"Player '{player_id}' disconnected from WebSocket.")
 
+    def reset_player_sync(self, player_id: str):
+        """
+        Resets a player's diff cache so the next push is a full_state.
+        用于前端状态被直接覆盖（如读档）后，避免基于过期缓存的 diff 造成状态失配。
+        """
+        conn_info = self.active_connections.get(player_id)
+        if not conn_info:
+            return
+        if player_id in self._debounce_tasks:
+            self._debounce_tasks[player_id].cancel()
+            del self._debounce_tasks[player_id]
+        self._pending_updates.pop(player_id, None)
+        conn_info["last_sent_state"] = None
+        logger.info(f"Player '{player_id}' diff cache reset for full-state sync.")
+
     def _prepare_player_payload(self, data: dict) -> dict:
         """Prepare payload for the actual player (remove internal_history)."""
         payload = copy.deepcopy(data)

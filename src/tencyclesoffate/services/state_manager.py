@@ -649,6 +649,10 @@ async def load_game_snapshot(player_id: str) -> dict | None:
     data["internal_history_count"] = len(data.get("internal_history", []))
     data["display_history_count"] = len(data.get("display_history", []))
 
+    # 读档时前端会直接从 HTTP 响应覆盖状态，需重置 diff 缓存，
+    # 使 save_session 推送权威 full_state，避免基于过期缓存的 diff 造成前后端状态失配
+    websocket_manager.reset_player_sync(player_id)
+
     # 覆盖写为当前会话（save_session 会自动推送 full_state 到前端）
     await save_session(player_id, data)
 
