@@ -113,3 +113,33 @@ async def cleanup_old_images(force: bool = False) -> int:
 def _safe_path_part(value: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value)[:40].strip("._-")
     return safe or "anonymous"
+
+
+def delete_player_images(player_id: str) -> int:
+    """
+    Deletes generated scene images belonging to a player.
+    Filenames follow the pattern '{timestamp}-{safe_player}-{digest}.{ext}'.
+    Returns the number of images removed.
+    """
+    if not player_id:
+        return 0
+    safe_player = _safe_path_part(player_id)
+    prefix = f"-{safe_player}-"
+    image_dir = get_image_dir()
+    if not image_dir.exists():
+        return 0
+
+    removed = 0
+    for path in image_dir.iterdir():
+        if not path.is_file() or path.suffix.lower() not in _ALLOWED_SUFFIXES:
+            continue
+        if prefix in path.name:
+            try:
+                path.unlink()
+                removed += 1
+            except OSError as e:
+                logger.warning("Failed to remove image %s: %s", path, e)
+
+    if removed:
+        logger.info("Removed %s generated images for player '%s'.", removed, player_id)
+    return removed

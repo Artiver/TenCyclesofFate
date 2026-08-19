@@ -9,6 +9,7 @@ from collections import OrderedDict
 from typing import Any
 import aiofiles
 
+from . import image_store
 from .websocket_manager import manager as websocket_manager
 
 # --- Logging ---
@@ -673,3 +674,26 @@ async def load_game_snapshot(player_id: str) -> dict | None:
 
     logger.info(f"玩家 {player_id} 已读档")
     return data
+
+
+async def delete_player_data(player_id: str):
+    """删除玩家的全部数据：会话、存档、索引、生成图片、缓存及 WebSocket 连接。"""
+    # 删除会话目录并移除索引与缓存
+    await _delete_session(player_id)
+
+    # 删除存档文件
+    save_path = _get_save_path(player_id)
+    if save_path.exists():
+        save_path.unlink()
+        logger.info(f"玩家 {player_id} 的存档已随账号删除")
+
+    # 立即落盘索引
+    await _save_index()
+
+    # 删除该玩家的生成图片
+    image_store.delete_player_images(player_id)
+
+    # 断开该玩家的 WebSocket 连接
+    websocket_manager.disconnect(player_id)
+
+    logger.info(f"玩家 {player_id} 的全部数据已删除")

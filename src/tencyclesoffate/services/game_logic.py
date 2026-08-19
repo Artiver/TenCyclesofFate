@@ -162,6 +162,14 @@ def _schedule_image_generation(player_id: str, trigger_time: float):
     _pending_image_tasks[player_id] = task
 
 
+def cancel_pending_image_tasks(player_id: str):
+    """取消该玩家的延迟图片生成任务（账号注销时调用）。"""
+    task = _pending_image_tasks.pop(player_id, None)
+    if task and not task.done():
+        task.cancel()
+        logger.info(f"玩家 {player_id} 的待生成图片任务已取消")
+
+
 # --- Game Logic ---
 
 

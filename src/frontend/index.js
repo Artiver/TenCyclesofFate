@@ -28,6 +28,7 @@ const DOMElements = {
     authToggleButton: document.getElementById('auth-toggle-button'),
     loginError: document.getElementById('login-error'),
     logoutButton: document.getElementById('logout-button'),
+    deleteAccountButton: document.getElementById('delete-account-button'),
     saveButton: document.getElementById('save-button'),
     loadButton: document.getElementById('load-button'),
     deleteSaveButton: document.getElementById('delete-save-button'),
@@ -188,13 +189,24 @@ const api = {
         if (!response.ok) throw new Error('删除存档失败');
         return response.json();
     },
+    async deleteAccount() {
+        const response = await fetch(`${API_BASE_URL}/account`, { method: 'DELETE' });
+        if (response.status === 409) {
+            const err = await response.json().catch(() => ({ detail: '正在处理中，暂无法注销' }));
+            throw new Error(err.detail || '正在处理中，暂无法注销');
+        }
+        if (!response.ok) throw new Error('注销失败');
+        return response.json();
+    },
 };
 
 // --- WebSocket Manager ---
 const socketManager = {
     socket: null,
+    preventReconnect: false,  // 账号注销等主动断开时置为 true，禁止自动重连
     connect() {
         return new Promise((resolve, reject) => {
+            this.preventReconnect = false;
             if (this.socket && this.socket.readyState === WebSocket.OPEN) {
                 resolve();
                 return;
@@ -248,7 +260,12 @@ const socketManager = {
                         break;
                 }
             };
-            this.socket.onclose = () => { console.log("Reconnecting..."); showLoading(true); setTimeout(() => this.connect(), 5000); };
+            this.socket.onclose = () => {
+                if (this.preventReconnect) return;
+                console.log("Reconnecting...");
+                showLoading(true);
+                setTimeout(() => this.connect(), 5000);
+            };
             this.socket.onerror = (error) => { console.error("WebSocket error:", error); DOMElements.loginError.textContent = '无法连接。'; reject(error); };
         });
     },
@@ -634,6 +651,26 @@ async function handleDelete() {
     }
 }
 
+async function handleDeleteAccount() {
+    if (appState.gameState && appState.gameState.is_processing) return;
+    const confirmed = await showConfirm('注销账户将永久删除本账号及其全部数据（存档、命途、兑换码等），且不可恢复。确定注销吗？');
+    if (!confirmed) return;
+    try {
+        await api.deleteAccount();
+        socketManager.preventReconnect = true;
+        if (socketManager.socket) socketManager.socket.close();
+        appState.gameState = null;
+        appState.saveInfo = null;
+        scrollState.isFirstRender = true;
+        document.body.classList.remove('has-scene-background');
+        DOMElements.sceneBackgroundImage.removeAttribute('src');
+        showView('login-view');
+        await showAlert('账号已注销，此界与此身，皆成过往。');
+    } catch (error) {
+        showAlert(error.message);
+    }
+}
+
 // --- Event Handlers ---
 function handleLogout() {
     api.logout();
@@ -742,6 +779,7 @@ function init() {
 
     // Setup event listeners regardless of initial view
     DOMElements.logoutButton.addEventListener('click', handleLogout);
+    DOMElements.deleteAccountButton.addEventListener('click', handleDeleteAccount);
     DOMElements.saveButton.addEventListener('click', handleSave);
     DOMElements.loadButton.addEventListener('click', handleLoad);
     DOMElements.deleteSaveButton.addEventListener('click', handleDelete);

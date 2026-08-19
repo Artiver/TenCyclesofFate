@@ -1,13 +1,15 @@
 import re
 from datetime import timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..core.config import settings
 from ..core.security import create_access_token
 from ..schemas.auth import LoginRequest, RegisterRequest
-from ..services import users
+from ..services import game_logic, state_manager, users
+from .deps import get_current_active_user
 
 router = APIRouter(prefix="/api")
 
@@ -99,5 +101,42 @@ async def logout():
     Logs the user out by clearing the authentication cookie.
     """
     response = RedirectResponse(url="/")
+    response.delete_cookie("token")
+    return response
+
+
+@router.delete("/account")
+async def delete_account(
+    current_user: Annotated[dict, Depends(get_current_active_user)],
+):
+    """
+    Permanently deletes the current account and all its data
+    (session, save, generated images, redemption codes).
+    """
+    player_id = current_user["username"]
+    user_id = current_user["user_id"]
+
+    # 处理中（AI 正在生成回复）时禁止注销，避免后台任务把数据写回
+    session = await state_manager.get_session(player_id)
+    if session and session.get("is_processing"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="正在处理中，暂无法注销",
+        )
+
+    # 取消待执行的图片生成任务
+    game_logic.cancel_pending_image_tasks(player_id)
+
+    # 删除文件数据（会话、存档、图片、索引、连接）
+    await state_manager.delete_player_data(player_id)
+
+    # 删除数据库记录（用户及兑换码）
+    if not users.delete_user(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="注销失败，请稍后重试",
+        )
+
+    response = JSONResponse(content={"deleted": True})
     response.delete_cookie("token")
     return response

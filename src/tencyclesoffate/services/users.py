@@ -82,3 +82,36 @@ def authenticate_user(username: str, password: str) -> dict | None:
     if not verify_password(password, user["password_hash"]):
         return None
     return user
+
+
+def delete_user(user_id: int) -> bool:
+    """Deletes a user and their associated redemption codes. Returns True on success."""
+    conn = db.get_db_connection()
+    if not conn:
+        return False
+    ph = _placeholder()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM users WHERE id = {ph}", (user_id,))
+        deleted = cursor.rowcount > 0
+
+        # Best-effort: the redemptions table only exists on MySQL; tolerate its absence.
+        try:
+            cursor.execute(f"DELETE FROM redemptions WHERE user_id = {ph}", (user_id,))
+        except Exception as e:
+            logger.warning(f"Failed to delete redemptions for user '{user_id}': {e}")
+
+        conn.commit()
+        if not deleted:
+            logger.warning(f"delete_user: user '{user_id}' not found")
+        else:
+            logger.info(f"User '{user_id}' deleted")
+        return deleted
+    except Exception as e:
+        logger.error(f"Failed to delete user '{user_id}': {e}", exc_info=True)
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
