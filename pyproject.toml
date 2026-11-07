@@ -1,6 +1,6 @@
 [project]
-name = "tencyclesoffate"
-version = "0.1.0"
+name = "backend"
+version = "1.0.0"
 description = "浮生十梦，天道轮回"
 readme = "README.md"
 authors = [
@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.scripts]
-project = "tencyclesoffate:run"
+project = "backend:run"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

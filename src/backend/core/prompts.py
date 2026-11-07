@@ -3,7 +3,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# 包级 prompts 目录：src/tencyclesoffate/prompts
+# 包级 prompts 目录：src/backend/prompts
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 

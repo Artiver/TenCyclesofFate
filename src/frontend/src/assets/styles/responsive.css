@@ -1,0 +1,89 @@
+/* --- 响应式 --- */
+@media (max-width: 850px) {
+  body {
+    padding: 0;
+  }
+
+  #app-container {
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+    border: none;
+  }
+
+  #game-view {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      'header'
+      'main'
+      'action';
+    position: relative;
+  }
+
+  #game-view.status-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  #game-header {
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  #game-header h1 {
+    font-size: 1.45rem;
+  }
+
+  #status-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 900;
+    border-right: none;
+    border-bottom: none;
+    padding: 1rem;
+    max-height: none;
+    transform: translateX(0);
+    transition: transform 0.25s ease;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+
+  #game-view.status-collapsed #status-panel {
+    padding: 0;
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+
+  #game-view.status-collapsed #status-rail-button {
+    display: none;
+  }
+
+  #status-close-button {
+    display: inline-block;
+  }
+
+  #narrative-window {
+    padding: 1rem;
+  }
+
+  .action-input-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  #action-button {
+    width: 100%;
+  }
+}
+
+/* --- 大屏（27 英寸 / 4K）字号缩放 --- */
+@media (min-width: 1920px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 2560px) {
+  html {
+    font-size: 22px;
+  }
+}

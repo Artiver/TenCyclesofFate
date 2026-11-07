@@ -1,0 +1,112 @@
+/* --- 登录视图：玉牌 --- */
+#login-view {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+#login-view h1 {
+  font-family: var(--font-sans);
+  font-size: 3.5rem;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3), 2px 2px 5px var(--shadow-color);
+  margin-bottom: 2rem;
+  letter-spacing: 0.2em;
+}
+
+#login-view p {
+  color: #eee;
+  text-shadow: 1px 1px 3px var(--shadow-color);
+  font-size: 1.1rem;
+  margin-bottom: 2.5rem;
+}
+
+.auth-form {
+  background: var(--panel-bg);
+  padding: 2.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 20px var(--shadow-color);
+  backdrop-filter: blur(5px);
+  width: 100%;
+  max-width: 400px;
+  box-sizing: border-box;
+}
+
+.auth-form input {
+  display: block;
+  margin: 1.2rem auto;
+  padding: 0.8rem 1rem;
+  width: 90%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 10px rgba(106, 139, 106, 0.5);
+}
+
+.auth-form .login-button {
+  display: block;
+  margin: 1.5rem auto 0.5rem;
+  width: 90%;
+}
+
+.auth-toggle-button {
+  background: transparent;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  margin-top: 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+.auth-toggle-button:hover {
+  color: var(--accent-color);
+}
+
+.login-button {
+  display: inline-block;
+  padding: 0.8rem 2.5rem;
+  background: linear-gradient(145deg, var(--accent-color), #c95c53);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50px;
+  cursor: pointer;
+  margin-top: 1.5rem;
+  font-family: var(--font-sans);
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 2px 2px rgba(255, 255, 255, 0.2);
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.login-button:hover:not(:disabled) {
+  background: linear-gradient(145deg, #c95c53, var(--accent-color));
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), inset 0 2px 3px rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  color: var(--accent-color);
+  min-height: 1.5rem;
+  font-weight: bold;
+}

@@ -1,0 +1,89 @@
+/* --- 基础排版与页面容器 --- */
+body {
+  font-family: var(--font-serif);
+  background-color: var(--bg-color);
+  background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%234a382a" fill-opacity="0.2"%3E%3Cpath d="M50 50c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10zM10 10c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+  background-attachment: fixed;
+  color: var(--text-color);
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 0;
+  box-sizing: border-box;
+  position: relative;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 15% 85%, rgba(106, 139, 106, 0.1), transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 叙事插画提取出的整页背景 */
+#scene-background-image {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  z-index: 2;
+}
+
+body.has-scene-background #scene-background-image {
+  opacity: 0.2;
+}
+
+/* Vue 挂载点：替代原实现中 body 直接作为容器父级 */
+#app {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- 主容器：木框 --- */
+#app-container {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  background: rgba(45, 30, 20, 0.38);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  border-radius: 0;
+  border: none;
+  box-shadow:
+    inset 0 0 0 2px #3d2c1d,
+    0 10px 40px var(--shadow-color);
+}
+
+/* --- 视图管理 --- */
+.view {
+  display: none;
+  flex-grow: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.view.active {
+  display: flex;
+}
+
+.hidden {
+  display: none !important;
+}

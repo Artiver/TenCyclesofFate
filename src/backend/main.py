@@ -59,7 +59,7 @@ app.mount("/", StaticFiles(directory=static_files_dir, html=True), name="static"
 def main():
     import uvicorn
     uvicorn.run(
-        "tencyclesoffate.main:app",
+        "backend.main:app",
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.UVICORN_RELOAD

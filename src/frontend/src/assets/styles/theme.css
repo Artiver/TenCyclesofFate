@@ -1,0 +1,17 @@
+/*
+ * 主题 Token：江南园林（Jiangnan Garden）
+ * 从旧 src/frontend/index.css 的 :root 原样迁移。
+ */
+:root {
+  --bg-color: #3d2c1d; /* Dark Wood */
+  --panel-bg: rgba(245, 247, 246, 0.9); /* White Jade with transparency */
+  --text-color: #3a2e28;
+  --title-color: #2c1e18;
+  --border-color: #8a704c; /* Bronze/Wood Accent */
+  --primary-color: #6a8b6a; /* Muted Jade Green */
+  --accent-color: #a8453c; /* Seal Red */
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --light-shadow: rgba(58, 46, 40, 0.2);
+  --font-serif: 'Ma Shan Zheng', 'KaiTi', 'STKaiti', '楷体', serif;
+  --font-sans: 'ZCOOL KuaiLe', 'Noto Sans SC', sans-serif;
+}
