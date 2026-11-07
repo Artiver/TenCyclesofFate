@@ -31,7 +31,7 @@ async function onDeleteAccount(): Promise<void> {
 
 <template>
   <header id="game-header">
-    <h1>浮生一梦</h1>
+    <h1>浮生十梦</h1>
     <div id="game-status">
       <span>剩余机缘: <span id="opportunities">{{ game.opportunities }}</span></span>
       <span v-if="connectionLabel" class="connection-status" role="status">
@@ -81,6 +81,7 @@ async function onDeleteAccount(): Promise<void> {
         id="delete-account-button"
         class="header-button header-button-danger"
         type="button"
+        :disabled="game.isProcessing"
         @click="onDeleteAccount"
       >
         注销账户

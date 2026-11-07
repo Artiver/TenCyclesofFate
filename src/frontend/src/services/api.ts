@@ -22,13 +22,13 @@ export const api = {
     })
   },
 
-  /** 服务端会清 Cookie 并 302 到 `/`，这里不需要解析响应体。 */
-  async logout(): Promise<void> {
-    try {
-      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' })
-    } catch {
-      // 登出失败不应阻塞本地状态清理
-    }
+  /** 服务端会清 Cookie 并 302 到 `/`，响应体无需解析。 */
+  logout() {
+    return request<void>('/logout', {
+      method: 'POST',
+      parse: false,
+      fallbackMessage: '登出失败',
+    })
   },
 
   deleteAccount() {

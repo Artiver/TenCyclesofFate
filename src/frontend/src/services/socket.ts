@@ -36,7 +36,6 @@ export class GameSocket {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private preventReconnect = false
   private hasConnected = false
-  private status: SocketStatus = 'idle'
 
   constructor(private readonly handlers: SocketHandlers) {}
 
@@ -145,7 +144,6 @@ export class GameSocket {
   }
 
   private setStatus(status: SocketStatus): void {
-    this.status = status
     this.handlers.onStatusChange(status)
   }
 

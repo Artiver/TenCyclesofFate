@@ -15,7 +15,6 @@ type AuthStatus = 'unknown' | 'authenticated' | 'guest'
  */
 export const useAuthStore = defineStore('auth', () => {
   const status = ref<AuthStatus>('unknown')
-  const username = ref<string | null>(null)
   const pending = ref(false)
 
   const isAuthenticated = computed(() => status.value === 'authenticated')
@@ -35,8 +34,7 @@ export const useAuthStore = defineStore('auth', () => {
   ): Promise<void> {
     pending.value = true
     try {
-      const result = await request()
-      username.value = result.username
+      await request()
 
       const game = useGameStore()
       const ok = await game.bootstrap()
@@ -56,8 +54,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout(): Promise<void> {
-    await api.logout()
-    resetLocal()
+    // 服务端可能已失效（网络/超时），但本地状态必须清理干净，否则界面停在登录态。
+    try {
+      await api.logout()
+    } finally {
+      resetLocal()
+    }
   }
 
   /** 注销账户：永久删除账号与全部数据；返回是否真的注销成功。 */
@@ -88,12 +90,10 @@ export const useAuthStore = defineStore('auth', () => {
     useGameStore().reset()
     useUiStore().setSceneImage(null)
     status.value = 'guest'
-    username.value = null
   }
 
   return {
     status,
-    username,
     pending,
     isAuthenticated,
     ensureSession,

@@ -10,7 +10,7 @@ const ui = useUiStore()
 </script>
 
 <template>
-  <div id="game-view" class="view active" :class="{ 'status-collapsed': ui.statusCollapsed }">
+  <div id="game-view" class="view" :class="{ 'status-collapsed': ui.statusCollapsed }">
     <GameHeader />
     <StatusPanel />
     <main id="main-content">

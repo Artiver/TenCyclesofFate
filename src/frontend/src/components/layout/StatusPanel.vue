@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
 import CharacterStatus from '@/components/game/CharacterStatus.vue'
 import { useUiStore } from '@/stores/ui'
 
 const ui = useUiStore()
-
-const toggleLabel = computed(() => (ui.statusCollapsed ? '展开状态' : '收起状态'))
 </script>
 
 <template>

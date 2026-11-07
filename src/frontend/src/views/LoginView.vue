@@ -12,8 +12,6 @@ const username = ref('')
 const password = ref('')
 const errorMessage = ref('')
 
-const usernamePattern = /^[A-Za-z0-9_]+$/
-
 const submitting = computed(() => auth.pending)
 const submitLabel = computed(() => (isRegisterMode.value ? '注册' : '登录'))
 const toggleLabel = computed(() => (isRegisterMode.value ? '已有账号？登录' : '没有账号？注册'))
@@ -29,12 +27,9 @@ function toggleMode(): void {
 async function submit(): Promise<void> {
   const name = username.value.trim()
 
+  // 用户名格式由输入框的 pattern 属性与后端共同校验，此处只拦空值。
   if (!name || !password.value) {
     errorMessage.value = '请输入用户名和密码'
-    return
-  }
-  if (!usernamePattern.test(name)) {
-    errorMessage.value = '用户名只能包含字母、数字和下划线'
     return
   }
 
@@ -54,7 +49,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <div id="login-view" class="view active">
+  <div id="login-view" class="view">
     <h1>浮生十梦</h1>
     <p>此乃试炼之地，请先表明身份。</p>
     <form id="auth-form" class="auth-form" @submit.prevent="submit">

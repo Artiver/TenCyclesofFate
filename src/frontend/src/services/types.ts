@@ -28,7 +28,6 @@ export interface GameState {
   display_history: string[]
   roll_event: RollEvent | null
   redemption_code?: string | null
-  [key: string]: unknown
 }
 
 export interface AuthResult {

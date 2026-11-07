@@ -38,7 +38,9 @@ app.include_router(game_api.router)
 app.include_router(ws_api.router)
 
 # --- Static Files ---
-static_files_dir = Path(__file__).parent.parent / "frontend"
+# 只对外提供构建产物：src/frontend 是源码目录，直接挂载会暴露 index.html（开发模板）与 src/**。
+# 目录不存在时 StaticFiles 会在启动阶段直接报错，提示先执行 `cd src/frontend && pnpm build`。
+static_files_dir = Path(__file__).parent.parent / "frontend" / "dist"
 generated_images_dir = image_store.get_image_dir()
 generated_images_dir.mkdir(parents=True, exist_ok=True)
 

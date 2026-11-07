@@ -2,7 +2,6 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 interface ModalEntry {
-  id: number
   title: string
   message: string
   confirm: boolean
@@ -12,8 +11,6 @@ interface ModalEntry {
 interface ModalOptions {
   title?: string
 }
-
-let nextModalId = 0
 
 const isNarrowScreen = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 850px)').matches
@@ -48,7 +45,7 @@ export const useUiStore = defineStore('ui', () => {
   function openModal(message: string, options: ModalOptions & { confirm?: boolean } = {}): Promise<boolean> {
     const { title = '天机所示', confirm = false } = options
     return new Promise<boolean>((resolve) => {
-      modalQueue.value.push({ id: ++nextModalId, title, message, confirm, resolve })
+      modalQueue.value.push({ title, message, confirm, resolve })
     })
   }
 

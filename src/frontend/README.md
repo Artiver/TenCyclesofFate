@@ -1,42 +1,36 @@
-# vue-project
+# 浮生十梦 · 前端
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Vite + Pinia + Vue Router（hash 模式）实现的单页前端。功能与后端接口契约见
+[`docs/frontend-feature-inventory.md`](./docs/frontend-feature-inventory.md)。
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## 开发
 
 ```sh
 pnpm install
+pnpm dev        # Vite 开发服务器，/api 与 /generated-images 反代到 VITE_BACKEND_TARGET（默认 127.0.0.1:8000）
 ```
 
-### Compile and Hot-Reload for Development
+若要覆盖后端地址，在**本目录**（不是仓库根目录）新建 `.env.local`：
 
 ```sh
-pnpm dev
+VITE_BACKEND_TARGET="http://127.0.0.1:8000"
 ```
 
-### Type-Check, Compile and Minify for Production
+## 构建
 
 ```sh
-pnpm build
+pnpm build      # vue-tsc 类型检查 + vite build，输出到 dist/
 ```
+
+`src/backend/main.py` 把 `src/frontend/dist` 挂为站点根目录，所以部署前必须构建；否则后端启动时会因目录缺失直接报错。
+
+## 目录
+
+| 路径 | 职责 |
+| --- | --- |
+| `src/views` | 路由级视图（`GameView`、`LoginView`） |
+| `src/components` | `common` 全局浮层 / `layout` 游戏骨架 / `game` 叙事与业力渲染 |
+| `src/stores` | `auth`（登录态）、`game`（session + WS）、`ui`（浮层、折叠、背景图） |
+| `src/services` | `http`（fetch 封装）、`api`（接口清单）、`socket`（gzip + JSON Patch 的 WS 客户端）、`types` |
+| `src/composables` | Markdown 安全渲染、自动滚动、场景背景提取 |
+| `src/assets/styles` | `theme`（设计 token）→ `base` → `auth` / `game` / `overlays` → `responsive`，按此顺序在 `main.ts` 引入 |

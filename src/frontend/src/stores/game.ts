@@ -78,8 +78,13 @@ export const useGameStore = defineStore('game', () => {
     // 增量消息必须先有全量基线，否则直接丢弃（服务端首次连接一定先推 full_state）。
     if (!session.value) return
     try {
-      const result = applyPatch(session.value, patch, true, false)
-      session.value = result.newDocument as GameState
+      // mutateDocument = true：直接在响应式对象上打补丁。若传 false，fast-json-patch 会先把整份
+      // 状态（含全部叙事历史）深拷贝一次，等于把服务端用增量省下的开销又还了回去。
+      const result = applyPatch(session.value, patch, true, true)
+      // 仅当补丁是根级 replace（path 为空）时 newDocument 才是新对象，此时需要换引用。
+      if (result.newDocument !== session.value) {
+        session.value = result.newDocument as GameState
+      }
       checkRollEvent()
     } catch (error) {
       console.error('Failed to apply state patch:', error)
@@ -159,8 +164,8 @@ export const useGameStore = defineStore('game', () => {
     const action = raw.trim()
     if (!action) return false
 
-    // 「开始试炼」允许在上一轮 is_processing 的收尾窗口内放行，避免被锁死。
-    if (action !== START_TRIAL_ACTION && isProcessing.value) return false
+    // 后端在 is_processing 期间会丢弃任何动作（game_logic.py），这里同口径拦截。
+    if (isProcessing.value) return false
 
     if (!socket || !socket.isOpen) {
       void ui.alert('连接已断开，请刷新。', { title: '连接异常' })

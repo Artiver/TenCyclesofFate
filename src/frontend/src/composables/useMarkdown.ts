@@ -25,7 +25,3 @@ export function renderMarkdownSafe(markdownText: string | null | undefined): str
   const raw = marked.parse(source, { async: false }) as string
   return DOMPurify.sanitize(raw, SANITIZE_OPTIONS) as string
 }
-
-export function useMarkdown() {
-  return { renderMarkdownSafe }
-}

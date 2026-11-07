@@ -12,9 +12,14 @@ const container = ref<HTMLElement | null>(null)
 const { scrollToBottom } = useSmoothScroll(container)
 const { scheduleUpdate, dispose } = useSceneBackground()
 
-/** 历史数组被整体替换（全量/增量/读档）时滚动并刷新背景。 */
+/**
+ * 只在「整份状态被替换」（首屏 / 读档 / WS full_state）或「历史变长」时滚动并刷新背景。
+ * 状态补丁只改 is_processing 等字段时不再触发滚动，避免打断玩家正在看的位置。
+ */
 watch(
-  () => game.history,
+  // 三个来源：整份状态换引用（首屏/读档/full_state）、历史变长、末条内容被改写。
+  // 只看 game.history 会让「只改 is_processing」的补丁也触发滚动（补丁不再深拷贝后，历史数组引用是稳定的）。
+  [() => game.session, () => game.history.length, () => game.history[game.history.length - 1]],
   async () => {
     await nextTick()
     scheduleUpdate(container.value)

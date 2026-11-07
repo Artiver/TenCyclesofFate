@@ -12,6 +12,6 @@
   --accent-color: #a8453c; /* Seal Red */
   --shadow-color: rgba(0, 0, 0, 0.3);
   --light-shadow: rgba(58, 46, 40, 0.2);
-  --font-serif: 'Ma Shan Zheng', 'KaiTi', 'STKaiti', '楷体', serif;
-  --font-sans: 'ZCOOL KuaiLe', 'Noto Sans SC', sans-serif;
+  --font-serif: '楷体';
+  --font-sans: '楷体';
 }

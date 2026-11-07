@@ -16,6 +16,8 @@ interface RequestOptions {
   body?: unknown
   /** 服务端未返回 detail 时使用的兜底文案（对应旧实现的 `throw new Error('存档失败')` 等）。 */
   fallbackMessage?: string
+  /** 响应体无需解析时置 false（如 logout 返回 302 跳转）。默认 true。 */
+  parse?: boolean
 }
 
 async function readDetail(response: Response): Promise<string | null> {
@@ -32,7 +34,7 @@ async function readDetail(response: Response): Promise<string | null> {
  * 统一请求封装：同源 + HttpOnly Cookie 鉴权（前端不接触 token）。
  */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, fallbackMessage = '请求失败，请稍后重试' } = options
+  const { method = 'GET', body, fallbackMessage = '请求失败，请稍后重试', parse = true } = options
 
   let response: Response
   try {
@@ -51,7 +53,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError(detail || fallbackMessage, response.status)
   }
 
-  if (response.status === 204) {
+  if (!parse || response.status === 204) {
     return undefined as T
   }
 
