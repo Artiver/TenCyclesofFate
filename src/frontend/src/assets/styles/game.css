@@ -132,7 +132,10 @@ body.has-scene-background #action-area {
   flex: 1;
 }
 
+/* 宽屏下由顶部栏的「展开/收起状态」统一控制，面板内不再重复放一个收起键；
+   窄屏时面板铺满全屏（见 responsive.css），才需要它作为关闭出口。 */
 #status-close-button {
+  display: none;
   flex-shrink: 0;
 }
 
@@ -302,10 +305,12 @@ body.has-scene-background #action-area {
   box-shadow: 0 4px 15px var(--shadow-color);
 }
 
-/* 玩家输入与系统提示：补齐旧实现只加 class 不给样式的缺口 */
+/* 玩家输入与系统提示：由后端下发的 role 决定，不再依赖文本前缀 */
 #narrative-window .user-input-message {
   border-right: 2px solid rgba(106, 139, 106, 0.45);
-  padding-right: 0.75em;
+  padding: 0.5em 0.9em;
+  background: rgba(106, 139, 106, 0.06);
+  border-radius: 4px 0 0 4px;
   color: #5f7a5f;
 }
 
@@ -336,12 +341,6 @@ body.has-scene-background #action-area {
   font-family: inherit;
   font-size: 1rem;
   transition: all 0.3s ease;
-}
-
-#action-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 10px rgba(106, 139, 106, 0.5);
 }
 
 #action-button,
@@ -391,6 +390,16 @@ body.has-scene-background #action-area {
 
 #start-trial-button:hover:not(:disabled) {
   background: #c95c53;
+}
+
+/* 点击后 / 当日不可用：置灰显示，明确传达「不能再点」，与红色可点状态区分 */
+#start-trial-button:disabled {
+  background: #b7b0a8;
+  color: #f4f1ec;
+  cursor: not-allowed;
+  opacity: 0.8;
+  transform: none;
+  box-shadow: none;
 }
 
 #action-input:disabled,

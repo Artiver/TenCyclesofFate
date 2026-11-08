@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { setSocketAuthErrorHandler } from '@/stores/game'
 
 /**
- * 使用 hash 模式：后端对任何 404 都会 302 到 `/`（main.py:46），
+ * 使用 hash 模式：后端对非 API 的未知路径会重定向到 `/`（main.py:not_found_handler），
  * history 模式下刷新深链接会被绕回根路径，hash 模式可完全避开这一限制。
  */
 const router = createRouter({

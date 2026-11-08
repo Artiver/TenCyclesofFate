@@ -48,6 +48,6 @@ onBeforeUnmount(dispose)
     @load.capture="onMediaEvent"
     @error.capture="onMediaEvent"
   >
-    <NarrativeEntry v-for="(entry, index) in game.history" :key="index" :text="entry" />
+    <NarrativeEntry v-for="(entry, index) in game.history" :key="index" :entry="entry" />
   </div>
 </template>

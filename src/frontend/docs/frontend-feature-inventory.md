@@ -106,7 +106,7 @@ status  action
 | `is_in_trial` | bool | 是否处于试炼中；决定输入行是否显示 |
 | `is_processing` | bool | 全局交互禁用 + 小 spinner；`true` 时 even 存档/读档/注销都被拦 |
 | `current_life` | object\|null | 侧栏「人物业力」递归渲染；`null` 时显示「静待天命...」 |
-| `display_history` | string[] | 叙事区逐条 Markdown 渲染 + 场景背景图来源 |
+| `display_history` | `HistoryEntry[]`（`{role, text}`，见 5.1） | 叙事区逐条 Markdown 渲染 + 场景背景图来源 |
 | `roll_event` | object\|null | 判定动画；按 `id` 去重；服务端处理完会置回 `null` |
 | `session_date` / `redemption_code` | — | **前端未使用**（兑换码/日期没有任何 UI 呈现） |
 
@@ -121,8 +121,10 @@ status  action
   - `USE_PROFILES: {html:true}`
   - 禁标签：`script/style/iframe/object/embed/link/meta`
   - 禁属性：`onerror/onload/onclick/onmouseover/onfocus/onmouseenter/onmouseleave/style`
-- 分类增补 class：`"> "` 开头 → `.user-input-message`；`"【"` 开头 → `.system-message`。**注意：CSS 中这两个类没有定义任何样式**（应为死代码/待补样式）。
-- 图片：`![场景插画](/generated-images/xxx.png)` 由后端追加进 `display_history`（`game_logic.py:125`）。
+- **（已重构）** 条目结构化为 `{"role": "user" | "system" | "narrative", "text": "<markdown>"}`，由后端 `state_manager.display_entry()` 写入。
+  渲染时按 `role` 加 class（`user` → `.user-input-message`，`system` → `.system-message`，`narrative` → 无附加类），
+  不再解析 `"> "` / `"【"` 前缀。旧数据在 `state_manager.get_session()` / `load_game_snapshot()` 读取时自动迁移。
+- 图片：`![场景插画](/generated-images/xxx.png)` 由后端追加进 `display_history`（`game_logic.py:125`），角色为 `narrative`。
 
 ### 5.2 场景背景提取算法（`index.js:477`）
 1. `requestAnimationFrame` 后扫描 `#narrative-window img[src]`；
@@ -216,8 +218,8 @@ status  action
 3. `roll_event.id` 去重：同一判定只播一次动画；`roll_event` 会被后端复位为 `null`。
 4. 「开始试炼」动作字符串必须精确为 `开始试炼`（后端 `game_logic.py:743` 按字面量匹配，也接受「开启下一次试炼」「开始第一次试炼」）。
 5. `opportunities_remaining === -10` 是「天道斥逐」哨兵，不是普通数字，UI 必须把 `<0` 与 `>0` 分开处理。
-6. 输入行隐藏 ≠ 不能行动：试炼结束后由「开始试炼」按钮驱动，且**该动作允许在 `is_processing` 时放行**（原代码 `index.js:726` 注释说明是为了避免 `finally` 前被锁死）。
-7. 404 全局重定向：后端任何 404 都 302 到 `/`（`main.py:46`），因此**不能用 `createWebHistory` 加多路径**，否则刷新 `/game` 会被绕回根路径而丢掉路由。重构建议二选一：
+6. 输入行隐藏 ≠ 不能行动：试炼结束后由「开始试炼」按钮驱动。**注**：早期「该动作允许在 `is_processing` 时放行」的例外已移除——后端在 `is_processing` 期间会丢弃任何动作（`game_logic.py`），前端放行只会丢点击。
+7. 404 处理：后端对**非 API** 的未知路径重定向到 `/`，`/api/*` 返回 JSON 404（`main.py:not_found_handler`）。因此**不能用 `createWebHistory` 加多路径**，否则刷新 `/game` 会被绕回根路径而丢掉路由。重构建议二选一：
    - 用 `createWebHashHistory()`（最省事）；
    - 或用 history 模式但把游戏态放根路由 `/`、登录态放 `/login`，并在后端为 SPA 增加 fallback。
 8. 开发期需在 Vite 配置 `/api` 代理，且 WS 必须在代理里启用：

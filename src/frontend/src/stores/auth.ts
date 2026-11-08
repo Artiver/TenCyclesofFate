@@ -75,6 +75,10 @@ export const useAuthStore = defineStore('auth', () => {
     // 服务端可能已失效（网络/超时），但本地状态必须清理干净，否则界面停在登录态。
     try {
       await api.logout()
+    } catch (error) {
+      // 后端 logout 用 307 跳到 `/`，浏览器会沿用 POST 跟进，静态站点只接受 GET 而回 405；
+      // 但 307 响应本身已清除 Cookie，因此这里只留痕、不抛出——登出必须依旧回到登录页。
+      console.warn('Logout request failed:', describeError(error))
     } finally {
       resetLocal()
     }

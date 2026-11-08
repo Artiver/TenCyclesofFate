@@ -100,36 +100,31 @@
   }
 }
 
-/* --- 主题化弹窗（替代 alert / confirm） --- */
-#modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(5px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 3000;
-}
-
-#modal-overlay.modal-closing {
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
+/* --- 主题化弹窗（原生 <dialog>，替代 alert / confirm） --- */
 #modal-panel {
+  /* dialog 只在 open 时显示，居中与顶层由浏览器负责（top-layer） */
   background: var(--panel-bg);
-  padding: 2rem 2.5rem;
+  color: var(--text-color);
+  padding: 0;
   border-radius: 6px;
   border: 1px solid var(--border-color);
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(5px);
   text-align: center;
   max-width: min(420px, 90vw);
+}
+
+#modal-content {
+  padding: 2rem 2.5rem;
+}
+
+#modal-panel[open] {
   animation: modalIn 0.25s ease both;
+}
+
+#modal-panel::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
 }
 
 @keyframes modalIn {
@@ -182,18 +177,9 @@
   transition: all 0.3s ease;
 }
 
-.modal-confirm {
-  background: linear-gradient(145deg, var(--accent-color), #c95c53);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 2px 2px rgba(255, 255, 255, 0.2);
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4);
-}
-
+/* 渐变/描边/投影与登录键共用 base.css 的 .seal-button，这里只留位移 */
 .modal-confirm:hover {
-  background: linear-gradient(145deg, #c95c53, var(--accent-color));
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), inset 0 2px 3px rgba(255, 255, 255, 0.3);
 }
 
 .modal-cancel {
@@ -211,7 +197,7 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner,
   .dice-cup,
-  #modal-panel {
+  #modal-panel[open] {
     animation: none;
   }
 }

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import auth as auth_api
@@ -47,7 +47,10 @@ generated_images_dir.mkdir(parents=True, exist_ok=True)
 # --- 404 Exception Handler ---
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc: HTTPException):
-    """Redirect all 404 errors to the root page."""
+    """API 路径返回 JSON 404；其余路径仍回落到首页（前端用 hash 路由）。"""
+    path = request.url.path
+    if path == "/api" or path.startswith("/api/"):
+        return JSONResponse(status_code=404, content={"detail": "接口不存在"})
     return RedirectResponse(url="/")
 
 app.mount(

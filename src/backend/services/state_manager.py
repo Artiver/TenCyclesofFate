@@ -58,6 +58,53 @@ def _get_display_history_path(player_id: str) -> Path:
     return _get_session_dir(player_id) / "display_history.jsonl"
 
 
+# --- 叙事条目（display_history）结构 ---
+# 条目统一为 {"role": ..., "text": ...}，前端不再靠 "> " / "【" 前缀猜类型。
+ROLE_USER = "user"
+ROLE_SYSTEM = "system"
+ROLE_NARRATIVE = "narrative"
+_VALID_ROLES = frozenset({ROLE_USER, ROLE_SYSTEM, ROLE_NARRATIVE})
+
+
+def display_entry(role: str, text: str) -> dict:
+    """构造一条结构化叙事条目——写入 display_history 的唯一入口。"""
+    return {"role": role if role in _VALID_ROLES else ROLE_NARRATIVE, "text": text}
+
+
+def _infer_role(text: str) -> str:
+    """旧版条目是纯字符串，靠约定前缀区分：`> ` 为玩家输入，`【` 为系统提示。"""
+    stripped = text.lstrip()
+    if stripped.startswith(">"):
+        return ROLE_USER
+    if stripped.startswith("【"):
+        return ROLE_SYSTEM
+    return ROLE_NARRATIVE
+
+
+def normalize_entry(item) -> dict:
+    """把任意形态（旧字符串 / 已有 dict / None）的条目规范成 {"role", "text"}。"""
+    if isinstance(item, dict):
+        text = "" if item.get("text") is None else str(item["text"])
+        role = item.get("role")
+        return {"role": role if role in _VALID_ROLES else _infer_role(text), "text": text}
+
+    text = "" if item is None else str(item)
+    role = _infer_role(text)
+    if role == ROLE_USER:
+        # 迁移旧数据：去掉 "> " 标记，样式交给 role 决定
+        text = text.lstrip()[1:].lstrip()
+    return {"role": role, "text": text}
+
+
+def normalize_display_history(items) -> list[dict]:
+    return [normalize_entry(item) for item in (items or [])]
+
+
+def display_texts(items) -> list[str]:
+    """取出纯文本，供提示词拼接等只关心内容的场景使用。"""
+    return [normalize_entry(item)["text"] for item in (items or [])]
+
+
 # --- LRU Cache Management ---
 def _cache_meta(player_id: str, meta: dict):
     """将元数据加入 LRU 缓存"""
@@ -471,13 +518,20 @@ async def get_session(player_id: str) -> dict | None:
     
     # 加载历史记录
     internal_history = await _read_jsonl_file(_get_internal_history_path(player_id))
-    display_history = await _read_jsonl_file(_get_display_history_path(player_id))
-    
+    raw_display_history = await _read_jsonl_file(_get_display_history_path(player_id))
+
+    # 旧数据用裸字符串存条目：读取时就地迁移一次，之后文件里只会是结构化条目
+    if any(not isinstance(item, dict) for item in raw_display_history):
+        display_history = normalize_display_history(raw_display_history)
+        await _write_jsonl_file(_get_display_history_path(player_id), display_history)
+    else:
+        display_history = raw_display_history
+
     # 组装完整会话
     session = meta.copy()
     session["internal_history"] = internal_history
     session["display_history"] = display_history
-    
+
     return session
 
 
@@ -515,8 +569,9 @@ async def save_session(player_id: str, session_data: dict):
             # 历史被重置或清空，重写整个文件
             await _write_jsonl_file(_get_internal_history_path(player_id), internal_history)
     
-    # 处理 display_history
+    # 处理 display_history（写入前统一结构，历史文件里也就不会再出现裸字符串）
     if display_history is not None:
+        display_history = normalize_display_history(display_history)
         new_count = len(display_history)
         data_to_save["display_history_count"] = new_count
         
@@ -653,6 +708,9 @@ async def load_game_snapshot(player_id: str) -> dict | None:
     data.pop("saved_at", None)
     data["is_processing"] = False
     data["roll_event"] = None
+
+    # 旧存档里的 display_history 可能还是字符串条目，读档时一并升级
+    data["display_history"] = normalize_display_history(data.get("display_history", []))
 
     # 读档视为今日会话，刷新时不被每日重置逻辑清掉
     data["session_date"] = date.today().isoformat()

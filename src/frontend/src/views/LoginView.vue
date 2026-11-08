@@ -96,7 +96,12 @@ async function submit(): Promise<void> {
         :autocomplete="passwordAutocomplete"
         required
       />
-      <button id="auth-submit-button" class="login-button" type="submit" :disabled="submitting">
+      <button
+        id="auth-submit-button"
+        class="login-button seal-button"
+        type="submit"
+        :disabled="submitting"
+      >
         {{ submitLabel }}
       </button>
       <button

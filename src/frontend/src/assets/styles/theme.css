@@ -12,6 +12,8 @@
   --accent-color: #a8453c; /* Seal Red */
   --shadow-color: rgba(0, 0, 0, 0.3);
   --light-shadow: rgba(58, 46, 40, 0.2);
-  --font-serif: '楷体';
-  --font-sans: '楷体';
+  /* 正文与标题当前同为楷体；保留两个 token 便于日后单独换标题字体。
+     字体栈必须带通用兜底：仅有 '楷体' 时 macOS/Linux 会落到浏览器默认无衬线字体。 */
+  --font-serif: 'KaiTi', 'STKaiti', '楷体', serif;
+  --font-sans: var(--font-serif);
 }

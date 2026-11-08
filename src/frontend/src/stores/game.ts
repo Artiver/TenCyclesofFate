@@ -12,6 +12,8 @@ import { useUiStore } from './ui'
 /** 与后端 game_logic.py 中的字面量协议保持一致。 */
 const START_TRIAL_ACTION = '开始试炼'
 const INITIAL_OPPORTUNITIES = 10
+/** 点按锁兜底时长：WS 迟迟没有确认时也要让按钮恢复，避免永久卡在置灰状态。 */
+const START_TRIAL_LOCK_TIMEOUT = 10_000
 
 /** WebSocket 单实例持有在模块作用域，避免被 Vue 响应式代理。 */
 let socket: GameSocket | null = null
@@ -37,6 +39,12 @@ export const useGameStore = defineStore('game', () => {
   const lastRollEventId = ref<string | null>(null)
   const socketStatus = ref<SocketStatus>('idle')
   const firstRender = ref(true)
+  /**
+   * 本地点按锁：点击「开始试炼」后立刻为 true，按钮随即置灰。
+   * 服务端的 `is_processing` 要等一次 WS 往返才回来，只靠它挡不住往返期间的连点。
+   */
+  const startTrialPending = ref(false)
+  let startTrialLockTimer: ReturnType<typeof setTimeout> | null = null
 
   const isProcessing = computed(() => session.value?.is_processing === true)
   const opportunities = computed(() => session.value?.opportunities_remaining ?? 0)
@@ -60,6 +68,7 @@ export const useGameStore = defineStore('game', () => {
   })
   const startTrialDisabled = computed(
     () =>
+      startTrialPending.value ||
       dailySuccessAchieved.value ||
       opportunities.value <= 0 ||
       isProcessing.value ||
@@ -81,9 +90,28 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function clearStartTrialPending(): void {
+    if (startTrialLockTimer !== null) {
+      clearTimeout(startTrialLockTimer)
+      startTrialLockTimer = null
+    }
+    startTrialPending.value = false
+  }
+
+  /**
+   * 服务端状态已反映本次点击（`is_processing` 或 `is_in_trial`）→ 释放本地点按锁，
+   * 后续由这两个字段继续把按钮按在禁用态，直到试炼真正开始、按钮隐藏。
+   */
+  function syncStartTrialPending(): void {
+    if (!startTrialPending.value) return
+    const state = session.value
+    if (!state || state.is_processing || state.is_in_trial) clearStartTrialPending()
+  }
+
   function replaceSession(next: GameState): void {
     session.value = next
     checkRollEvent()
+    syncStartTrialPending()
   }
 
   function applyStatePatch(patch: Operation[]): void {
@@ -98,6 +126,7 @@ export const useGameStore = defineStore('game', () => {
         session.value = result.newDocument as GameState
       }
       checkRollEvent()
+      syncStartTrialPending()
     } catch (error) {
       console.error('Failed to apply state patch:', error)
     }
@@ -109,7 +138,7 @@ export const useGameStore = defineStore('game', () => {
         onFullState: replaceSession,
         onPatch: applyStatePatch,
         onError: (detail) => {
-          void ui.alert(`WebSocket Error: ${detail}`, { title: '连接异常' })
+          void ui.alert(`服务端传讯异常：${detail}`, { title: '连接异常' })
         },
         onAuthError: () => {
           // Cookie 过期/被清除：直接重连只会被反复拒绝，交给 auth 清理状态并回登录页。
@@ -168,6 +197,7 @@ export const useGameStore = defineStore('game', () => {
     lastRollEventId.value = null
     socketStatus.value = 'idle'
     firstRender.value = true
+    clearStartTrialPending()
   }
 
   function consumeFirstRender(): boolean {
@@ -194,7 +224,14 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function startTrial(): boolean {
-    return submitAction(START_TRIAL_ACTION)
+    // 本地点按锁 + 派生禁用条件：按钮点击后立即置灰，不等服务端回包，避免连点发出多次试炼。
+    if (startTrialDisabled.value) return false
+    if (!submitAction(START_TRIAL_ACTION)) return false
+
+    startTrialPending.value = true
+    if (startTrialLockTimer !== null) clearTimeout(startTrialLockTimer)
+    startTrialLockTimer = setTimeout(clearStartTrialPending, START_TRIAL_LOCK_TIMEOUT)
+    return true
   }
 
   async function save(): Promise<void> {

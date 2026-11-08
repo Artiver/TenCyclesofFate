@@ -19,8 +19,12 @@ const connectionLabel = computed(() => {
 })
 
 async function onLogout(): Promise<void> {
-  await auth.logout()
-  await router.replace({ name: 'login' })
+  // 无论登出接口成功与否，本地状态都已清空，必须回到登录页；用 finally 保证跳转不被异常吞掉。
+  try {
+    await auth.logout()
+  } finally {
+    await router.replace({ name: 'login' })
+  }
 }
 
 async function onDeleteAccount(): Promise<void> {

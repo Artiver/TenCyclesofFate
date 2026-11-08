@@ -2,19 +2,20 @@
 import { computed } from 'vue'
 
 import { renderMarkdownSafe } from '@/composables/useMarkdown'
+import type { HistoryEntry } from '@/services/types'
 
-const props = defineProps<{ text: string }>()
+const props = defineProps<{ entry: HistoryEntry }>()
 
-const html = computed(() => renderMarkdownSafe(props.text))
+const html = computed(() => renderMarkdownSafe(props.entry.text))
 
-/** 旧实现的分类规则：`> ` 为玩家输入，`【` 为系统提示。 */
-const entryClass = computed(() => {
-  if (props.text.startsWith('> ')) return 'user-input-message'
-  if (props.text.startsWith('【')) return 'system-message'
+/** 角色 → 既有样式类，不再解析 "> " / "【" 前缀。 */
+const roleClass = computed(() => {
+  if (props.entry.role === 'user') return 'user-input-message'
+  if (props.entry.role === 'system') return 'system-message'
   return ''
 })
 </script>
 
 <template>
-  <div class="narrative-entry" :class="entryClass" v-html="html"></div>
+  <div class="narrative-entry" :class="roleClass" v-html="html"></div>
 </template>
