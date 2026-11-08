@@ -13,6 +13,8 @@ const password = ref('')
 const errorMessage = ref('')
 
 const submitting = computed(() => auth.pending)
+/** 首次探测因网络/服务端故障失败：此时不该让用户怀疑自己填错了密码。 */
+const probeFailed = computed(() => auth.status === 'error')
 const submitLabel = computed(() => (isRegisterMode.value ? '注册' : '登录'))
 const toggleLabel = computed(() => (isRegisterMode.value ? '已有账号？登录' : '没有账号？注册'))
 const passwordAutocomplete = computed(() =>
@@ -22,6 +24,19 @@ const passwordAutocomplete = computed(() =>
 function toggleMode(): void {
   isRegisterMode.value = !isRegisterMode.value
   errorMessage.value = ''
+}
+
+async function retryProbe(): Promise<void> {
+  errorMessage.value = ''
+  try {
+    if ((await auth.retry()) === 'authenticated') {
+      await router.replace({ name: 'game' })
+    } else {
+      errorMessage.value = '仍无法连接服务器，请稍后重试'
+    }
+  } catch {
+    errorMessage.value = '仍无法连接服务器，请稍后重试'
+  }
 }
 
 async function submit(): Promise<void> {
@@ -51,7 +66,17 @@ async function submit(): Promise<void> {
 <template>
   <div id="login-view" class="view">
     <h1>浮生十梦</h1>
-    <p>此乃试炼之地，请先表明身份。</p>
+    <p v-if="probeFailed">未能连上天机，或许是网络断了。可再试一次，或直接表明身份。</p>
+    <p v-else>此乃试炼之地，请先表明身份。</p>
+    <button
+      v-if="probeFailed"
+      id="probe-retry-button"
+      class="auth-toggle-button"
+      type="button"
+      @click="retryProbe"
+    >
+      重新连接
+    </button>
     <form id="auth-form" class="auth-form" @submit.prevent="submit">
       <input
         id="username-input"

@@ -1,128 +1,45 @@
-import { onBeforeUnmount, onMounted, type Ref } from 'vue'
+import type { Ref } from 'vue'
 
 interface ScrollOptions {
-  /** 首次渲染/重连后直接跳到底部，不做缓动。 */
+  /** 首次渲染 / 读档后直接跳到底部，不做平滑滚动。 */
   instant?: boolean
-  /** 缓动速度，默认 150px/s（沿用旧实现）。 */
-  pixelsPerSecond?: number
 }
 
-const MIN_SCROLL_DISTANCE = 50
-const MAX_RETRY = 10
-const USER_SCROLL_COOLDOWN = 2000
+/** 距底部多少像素以内视为「仍在跟随最新叙事」。 */
+const STICKY_THRESHOLD = 80
 
 /**
- * 叙事区自动滚动：
- * - 距底 < 50px 时最多重试 10 次（内容未完成布局时不放弃）；
- * - 150px/s 二次缓动；
- * - 用户滚轮/触摸立即中断，2s 后恢复允许自动滚动。
+ * 叙事区自动滚动。
+ *
+ * - 平滑滚动交给浏览器原生 `scrollTo({ behavior: 'smooth' })`，不再手写 rAF 缓动、
+ *   重试计数与 2s 冷却计时器；
+ * - 用「上一次的内容高度」推断玩家是否仍停在底部：新叙事或插画撑高内容后，
+ *   只有本来就在底部的玩家会被带着走，向上翻阅（滚轮 / 滚动条 / 键盘 / 触摸）时保持原位。
+ *   旧实现只监听 wheel/touch，拖动滚动条或键盘翻页会被强行拽回底部。
  */
 export function useSmoothScroll(target: Ref<HTMLElement | null>) {
-  let animationId: number | null = null
-  let retryTimer: ReturnType<typeof setTimeout> | null = null
-  let idleTimer: ReturnType<typeof setTimeout> | null = null
-  let userScrolling = false
-  let boundElement: HTMLElement | null = null
-
-  function cancelAnimation(): void {
-    if (animationId !== null) {
-      cancelAnimationFrame(animationId)
-      animationId = null
-    }
-    if (retryTimer !== null) {
-      clearTimeout(retryTimer)
-      retryTimer = null
-    }
-  }
+  /** 上一次渲染完成时的内容高度，用于判断这次增长是否「发生在玩家脚下」。 */
+  let lastHeight = 0
 
   function scrollToBottom(options: ScrollOptions = {}): void {
-    const element = target.value
-    if (!element) return
+    const el = target.value
+    if (!el) return
 
     if (options.instant) {
-      cancelAnimation()
-      element.scrollTop = element.scrollHeight
+      el.scrollTo({ top: el.scrollHeight, behavior: 'instant' })
+      lastHeight = el.scrollHeight
       return
     }
 
-    if (userScrolling) return
-    cancelAnimation()
+    // 内容只增不减，因此「当前到之前的底部」的距离约等于本次新增的高度；
+    // 玩家原本贴底时这个距离不会超过新增高度 + 容差。
+    const added = Math.max(0, el.scrollHeight - lastHeight)
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    lastHeight = el.scrollHeight
 
-    const pixelsPerSecond = options.pixelsPerSecond ?? 150
-    const startScrollTop = element.scrollTop
-
-    const tryStart = (retryCount = 0): void => {
-      const targetScrollTop = element.scrollHeight - element.clientHeight
-      const distance = targetScrollTop - startScrollTop
-
-      if (distance < MIN_SCROLL_DISTANCE && retryCount < MAX_RETRY) {
-        retryTimer = setTimeout(() => tryStart(retryCount + 1), 100)
-        return
-      }
-      if (distance <= 0 || userScrolling) return
-
-      const startTime = performance.now()
-      const duration = (distance / pixelsPerSecond) * 1000
-
-      const animate = (currentTime: number): void => {
-        if (userScrolling) {
-          animationId = null
-          return
-        }
-        const progress = Math.min((currentTime - startTime) / duration, 1)
-        const eased = 1 - (1 - progress) * (1 - progress)
-        element.scrollTop = startScrollTop + distance * eased
-        animationId = progress < 1 ? requestAnimationFrame(animate) : null
-      }
-
-      animationId = requestAnimationFrame(animate)
-    }
-
-    tryStart()
+    if (distance > added + STICKY_THRESHOLD) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }
-
-  function beginUserScroll(): void {
-    userScrolling = true
-    cancelAnimation()
-    if (idleTimer !== null) {
-      clearTimeout(idleTimer)
-      idleTimer = null
-    }
-  }
-
-  function endUserScrollSoon(): void {
-    if (idleTimer !== null) clearTimeout(idleTimer)
-    idleTimer = setTimeout(() => {
-      userScrolling = false
-      idleTimer = null
-    }, USER_SCROLL_COOLDOWN)
-  }
-
-  const onWheel = (): void => {
-    beginUserScroll()
-    endUserScrollSoon()
-  }
-  const onTouchStart = (): void => beginUserScroll()
-  const onTouchEnd = (): void => endUserScrollSoon()
-
-  onMounted(() => {
-    boundElement = target.value
-    if (!boundElement) return
-    boundElement.addEventListener('wheel', onWheel, { passive: true })
-    boundElement.addEventListener('touchstart', onTouchStart, { passive: true })
-    boundElement.addEventListener('touchend', onTouchEnd, { passive: true })
-  })
-
-  onBeforeUnmount(() => {
-    boundElement?.removeEventListener('wheel', onWheel)
-    boundElement?.removeEventListener('touchstart', onTouchStart)
-    boundElement?.removeEventListener('touchend', onTouchEnd)
-    cancelAnimation()
-    if (idleTimer !== null) {
-      clearTimeout(idleTimer)
-      idleTimer = null
-    }
-  })
 
   return { scrollToBottom }
 }

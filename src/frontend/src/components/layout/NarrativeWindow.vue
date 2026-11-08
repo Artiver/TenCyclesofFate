@@ -33,7 +33,9 @@ watch(
 )
 
 function onMediaEvent(): void {
+  // 插画加载完成会撑高内容；玩家本就在底部时保持跟随（sticky 逻辑内部会判断）。
   scheduleUpdate(container.value)
+  scrollToBottom()
 }
 
 onBeforeUnmount(dispose)

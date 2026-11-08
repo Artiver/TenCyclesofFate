@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 
 import { pinia } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { setSocketAuthErrorHandler } from '@/stores/game'
 
 /**
  * 使用 hash 模式：后端对任何 404 都会 302 到 `/`（main.py:46），
@@ -29,19 +30,30 @@ const router = createRouter({
 
 /**
  * 首次导航时探测登录态（等价旧实现的「加载即 POST /api/game/init」），
- * 之后复用探测结果。
+ * 之后复用探测结果（`error` 态需显式调用 `auth.retry()` 才会重新探测）。
  */
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
-  const authenticated = await auth.ensureSession()
+  const status = await auth.ensureSession()
 
-  if (to.name !== 'login' && !authenticated) {
+  // `error`（网络/5xx）与 `guest`（401）都回登录页，但登录页会区分提示并提供重试入口。
+  if (to.name !== 'login' && status !== 'authenticated') {
     return { name: 'login' }
   }
-  if (to.name === 'login' && authenticated) {
+  if (to.name === 'login' && status === 'authenticated') {
     return { name: 'game' }
   }
   return true
+})
+
+/**
+ * WS 鉴权失败（Cookie 过期/被清除）时：清本地状态并立刻跳回登录视图。
+ * 路由守卫只在导航时执行，光改 store 状态会让用户停在没有数据的游戏视图里。
+ */
+setSocketAuthErrorHandler(() => {
+  const auth = useAuthStore(pinia)
+  auth.handleSessionExpired()
+  void router.replace({ name: 'login' })
 })
 
 export default router

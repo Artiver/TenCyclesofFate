@@ -16,6 +16,18 @@ const INITIAL_OPPORTUNITIES = 10
 /** WebSocket 单实例持有在模块作用域，避免被 Vue 响应式代理。 */
 let socket: GameSocket | null = null
 
+/**
+ * 鉴权失效回调由 auth store 注册：game 不直接依赖 auth，避免两个 store 循环引用。
+ */
+let onSocketAuthError: (() => void) | null = null
+
+/** 供 auth store 注册「WS 鉴权失败」的处理逻辑。 */
+export function setSocketAuthErrorHandler(handler: () => void): void {
+  onSocketAuthError = handler
+}
+
+export type BootstrapResult = 'ok' | 'guest' | 'error'
+
 export const useGameStore = defineStore('game', () => {
   const ui = useUiStore()
 
@@ -99,6 +111,10 @@ export const useGameStore = defineStore('game', () => {
         onError: (detail) => {
           void ui.alert(`WebSocket Error: ${detail}`, { title: '连接异常' })
         },
+        onAuthError: () => {
+          // Cookie 过期/被清除：直接重连只会被反复拒绝，交给 auth 清理状态并回登录页。
+          onSocketAuthError?.()
+        },
         onStatusChange: (status) => {
           socketStatus.value = status
         },
@@ -114,9 +130,9 @@ export const useGameStore = defineStore('game', () => {
 
   /**
    * 进入游戏：拉当日 session → 拉存档信息 → 渲染首屏 → 建立 WebSocket。
-   * 返回 false 表示未登录（401）或初始化失败，由路由守卫回落到登录视图。
+   * 只有确实未登录时才返回 `guest`；网络抖动或 5xx 返回 `error`，避免把用户误判成访客。
    */
-  async function bootstrap(): Promise<boolean> {
+  async function bootstrap(): Promise<BootstrapResult> {
     ui.setFullscreenLoading(true)
     try {
       const initialState = await api.initGame()
@@ -125,19 +141,20 @@ export const useGameStore = defineStore('game', () => {
 
       try {
         saveInfo.value = await api.getSaveInfo()
-      } catch {
+      } catch (error) {
+        // 存档信息失败不影响开局，但按钮状态会失真，留痕便于排查。
+        console.warn('Failed to load save info:', describeError(error))
         saveInfo.value = null
       }
 
       await connectSocket()
-      return true
+      return 'ok'
     } catch (error) {
-      if (!(error instanceof ApiError && error.status === 401)) {
-        console.error(`Session initialization failed: ${describeError(error)}`)
-      }
-      reset()
-      return false
+      if (error instanceof ApiError && error.status === 401) return 'guest'
+      console.error(`Session initialization failed: ${describeError(error)}`)
+      return 'error'
     } finally {
+      // 失败时的本地状态由调用方（auth）统一清理，这里保持单一职责。
       ui.setFullscreenLoading(false)
     }
   }

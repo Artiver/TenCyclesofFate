@@ -7,21 +7,33 @@ from .deps import decode_access_token, get_current_user
 router = APIRouter(prefix="/api")
 
 
+async def _reject(websocket: WebSocket, reason: str):
+    """
+    鉴权失败时先 accept 再 close(1008)。
+
+    直接 close 未 accept 的连接会触发「HTTP 握手被拒绝」，浏览器只能看到 1006（abnormal closure）
+    并把 reason 丢掉；前端因此无法区分「Cookie 过期」与「网络抖动」，只会盲目重连。先 accept
+    之后 1008 与 reason 能正常送达客户端。
+    """
+    await websocket.accept()
+    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=reason)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """Handles WebSocket connections for real-time game state updates."""
     token = websocket.cookies.get("token")
     if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
+        await _reject(websocket, "Missing token")
         return
     try:
         payload = decode_access_token(token)
         username: str | None = payload.get("sub")
         if username is None:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token payload")
+            await _reject(websocket, "Invalid token payload")
             return
     except HTTPException:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token validation failed")
+        await _reject(websocket, "Token validation failed")
         return
 
     await websocket_manager.connect(websocket, username)

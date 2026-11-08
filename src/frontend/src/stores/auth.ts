@@ -7,7 +7,7 @@ import type { AuthResult } from '@/services/types'
 import { useGameStore } from './game'
 import { useUiStore } from './ui'
 
-type AuthStatus = 'unknown' | 'authenticated' | 'guest'
+type AuthStatus = 'unknown' | 'authenticated' | 'guest' | 'error'
 
 /**
  * 身份状态：不保存 token（HttpOnly Cookie 由浏览器自动携带），
@@ -19,14 +19,24 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => status.value === 'authenticated')
 
-  /** 页面首次进入时探测登录态；重复调用复用首次结果。 */
-  async function ensureSession(): Promise<boolean> {
-    if (status.value !== 'unknown') return status.value === 'authenticated'
+  /**
+   * 页面首次进入时探测登录态；重复调用复用首次结果。
+   * `error` 表示网络/服务端故障——此时不能把用户当成访客踢去登录页，
+   * 路由守卫会留在游戏视图并提示重试。
+   */
+  async function ensureSession(): Promise<AuthStatus> {
+    if (status.value !== 'unknown') return status.value
 
     const game = useGameStore()
-    const ok = await game.bootstrap()
-    status.value = ok ? 'authenticated' : 'guest'
-    return ok
+    const result = await game.bootstrap()
+    status.value = result === 'ok' ? 'authenticated' : result === 'guest' ? 'guest' : 'error'
+    return status.value
+  }
+
+  /** 探测失败后的重试入口（`error` 态唯一能回到正常态的方式）。 */
+  async function retry(): Promise<AuthStatus> {
+    status.value = 'unknown'
+    return ensureSession()
   }
 
   async function authenticate(
@@ -37,9 +47,17 @@ export const useAuthStore = defineStore('auth', () => {
       await request()
 
       const game = useGameStore()
-      const ok = await game.bootstrap()
-      status.value = ok ? 'authenticated' : 'guest'
-      if (!ok) throw new Error('登录成功，但初始化试炼失败，请刷新重试')
+      const result = await game.bootstrap()
+      if (result === 'ok') {
+        status.value = 'authenticated'
+        return
+      }
+      status.value = result === 'guest' ? 'guest' : 'error'
+      throw new Error(
+        result === 'guest'
+          ? '登录成功，但初始化试炼失败，请刷新重试'
+          : '无法连接服务器，请检查网络后重试',
+      )
     } finally {
       pending.value = false
     }
@@ -92,11 +110,21 @@ export const useAuthStore = defineStore('auth', () => {
     status.value = 'guest'
   }
 
+  /**
+   * WS 以 1008 关闭代表 Cookie 已失效（后端会先 accept 再关闭，以便把 code 送达客户端）。
+   * 只清本地状态；跳转登录视图由 router 侧注册的回调负责（store 不应依赖 router）。
+   */
+  function handleSessionExpired(): void {
+    resetLocal()
+  }
+
   return {
     status,
     pending,
     isAuthenticated,
     ensureSession,
+    retry,
+    handleSessionExpired,
     login,
     register,
     logout,
