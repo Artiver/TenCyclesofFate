@@ -160,9 +160,11 @@ export const useGameStore = defineStore('game', () => {
   /**
    * 进入游戏：拉当日 session → 拉存档信息 → 渲染首屏 → 建立 WebSocket。
    * 只有确实未登录时才返回 `guest`；网络抖动或 5xx 返回 `error`，避免把用户误判成访客。
+   *
+   * 这里不碰全屏遮罩：登录场景下 `bootstrap` 跑在登录页上，铺遮罩会把登录页整屏糊住；
+   * 冷启动的遮罩由路由守卫负责，登录中的反馈由登录按钮的 spinner 负责。
    */
   async function bootstrap(): Promise<BootstrapResult> {
-    ui.setFullscreenLoading(true)
     try {
       const initialState = await api.initGame()
       firstRender.value = true
@@ -182,9 +184,6 @@ export const useGameStore = defineStore('game', () => {
       if (error instanceof ApiError && error.status === 401) return 'guest'
       console.error(`Session initialization failed: ${describeError(error)}`)
       return 'error'
-    } finally {
-      // 失败时的本地状态由调用方（auth）统一清理，这里保持单一职责。
-      ui.setFullscreenLoading(false)
     }
   }
 
@@ -243,7 +242,8 @@ export const useGameStore = defineStore('game', () => {
 
     try {
       saveInfo.value = await api.saveGame()
-      await ui.alert('存档成功')
+      // 结果用非模态轻提示：再开一个模态弹窗等于把白色面板连续闪两次。
+      ui.toast('存档成功')
     } catch (error) {
       await ui.alert(describeError(error, '存档失败'))
     }
@@ -260,7 +260,7 @@ export const useGameStore = defineStore('game', () => {
 
     try {
       replaceSession(await api.loadGame())
-      await ui.alert('读档成功')
+      ui.toast('读档成功')
     } catch (error) {
       await ui.alert(describeError(error, '读档失败'))
     }
@@ -277,7 +277,7 @@ export const useGameStore = defineStore('game', () => {
 
     try {
       saveInfo.value = await api.deleteSave()
-      await ui.alert('存档已删除')
+      ui.toast('存档已删除')
     } catch (error) {
       await ui.alert(describeError(error, '删除存档失败'))
     }

@@ -3,9 +3,11 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 
 const router = useRouter()
 const auth = useAuthStore()
+const ui = useUiStore()
 
 const isRegisterMode = ref(false)
 const username = ref('')
@@ -28,6 +30,8 @@ function toggleMode(): void {
 
 async function retryProbe(): Promise<void> {
   errorMessage.value = ''
+  // 重试探测没有按钮 pending 态可用，用（深色）全屏遮罩给出反馈，顺带挡住重复点击。
+  ui.setFullscreenLoading(true)
   try {
     if ((await auth.retry()) === 'authenticated') {
       await router.replace({ name: 'game' })
@@ -36,6 +40,8 @@ async function retryProbe(): Promise<void> {
     }
   } catch {
     errorMessage.value = '仍无法连接服务器，请稍后重试'
+  } finally {
+    ui.setFullscreenLoading(false)
   }
 }
 
@@ -86,6 +92,7 @@ async function submit(): Promise<void> {
         autocomplete="username"
         pattern="[A-Za-z0-9_]+"
         title="用户名只能包含字母、数字和下划线"
+        :disabled="submitting"
         required
       />
       <input
@@ -94,6 +101,7 @@ async function submit(): Promise<void> {
         type="password"
         placeholder="密码"
         :autocomplete="passwordAutocomplete"
+        :disabled="submitting"
         required
       />
       <button
@@ -102,12 +110,14 @@ async function submit(): Promise<void> {
         type="submit"
         :disabled="submitting"
       >
+        <span v-if="submitting" class="btn-spinner login-spinner" aria-hidden="true"></span>
         {{ submitLabel }}
       </button>
       <button
         id="auth-toggle-button"
         class="auth-toggle-button"
         type="button"
+        :disabled="submitting"
         @click="toggleMode"
       >
         {{ toggleLabel }}

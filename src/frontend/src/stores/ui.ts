@@ -15,14 +15,20 @@ interface ModalOptions {
 const isNarrowScreen = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 850px)').matches
 
+/** 轻提示默认停留时长（毫秒）。 */
+const TOAST_DURATION = 2600
+
 /**
- * 全局 UI 状态：加载遮罩、人物业力侧栏折叠、场景背景图、主题化弹窗队列。
+ * 全局 UI 状态：加载遮罩、人物业力侧栏折叠、场景背景图、主题化弹窗队列、轻提示。
  */
 export const useUiStore = defineStore('ui', () => {
   const fullscreenLoading = ref(false)
   const statusCollapsed = ref(isNarrowScreen())
   const sceneImage = ref<string | null>(null)
   const modalQueue = ref<ModalEntry[]>([])
+  /** 非模态轻提示：用于「存档成功」这类不需要玩家确认的反馈。 */
+  const toastMessage = ref<string | null>(null)
+  let toastTimer: ReturnType<typeof setTimeout> | null = null
 
   const currentModal = computed<ModalEntry | null>(() => modalQueue.value[0] ?? null)
 
@@ -65,12 +71,34 @@ export const useUiStore = defineStore('ui', () => {
     entry?.resolve(result)
   }
 
+  function clearToastTimer(): void {
+    if (toastTimer === null) return
+    clearTimeout(toastTimer)
+    toastTimer = null
+  }
+
+  /** 轻提示：不打断操作、不需要点击，重复调用会重置计时并覆盖文案。 */
+  function toast(message: string, duration = TOAST_DURATION): void {
+    clearToastTimer()
+    toastMessage.value = message
+    toastTimer = setTimeout(() => {
+      toastMessage.value = null
+      toastTimer = null
+    }, duration)
+  }
+
+  function dismissToast(): void {
+    clearToastTimer()
+    toastMessage.value = null
+  }
+
   return {
     fullscreenLoading,
     statusCollapsed,
     sceneImage,
     modalQueue,
     currentModal,
+    toastMessage,
     setFullscreenLoading,
     setStatusCollapsed,
     toggleStatusPanel,
@@ -79,5 +107,7 @@ export const useUiStore = defineStore('ui', () => {
     alert,
     confirm,
     resolveModal,
+    toast,
+    dismissToast,
   }
 })

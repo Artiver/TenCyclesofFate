@@ -65,12 +65,21 @@
   transition: color 0.3s ease;
 }
 
-.auth-toggle-button:hover {
+.auth-toggle-button:hover:not(:disabled) {
   color: var(--accent-color);
 }
 
+.auth-toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 .login-button {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   padding: 0.8rem 2.5rem;
   border-radius: 50px;
   cursor: pointer;
@@ -81,6 +90,14 @@
   text-decoration: none;
 }
 
+/* 提交中的按钮内 spinner：配色跟随朱印按钮的浅色前景（base.css 的 .btn-spinner 是深色版） */
+.login-button .login-spinner {
+  width: 16px;
+  height: 16px;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
 .login-button:hover:not(:disabled) {
   transform: translateY(-3px);
   color: #fff;
@@ -88,6 +105,12 @@
 
 .login-button:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-form input:disabled {
+  background: #ececec;
+  color: #8a8a8a;
   cursor: not-allowed;
 }
 

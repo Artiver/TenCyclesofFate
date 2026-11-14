@@ -1,11 +1,13 @@
 /* --- 加载遮罩 --- */
+/* 深色半透明而不是白色：遮罩只在「本次会话还没有任何内容」时短暂出现，
+   用白色会在登录页/首屏上形成整屏闪白。spinner 仍保留，指示依旧清晰。 */
 .spinner-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(26, 18, 12, 0.55);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -101,6 +103,9 @@
 }
 
 /* --- 主题化弹窗（原生 <dialog>，替代 alert / confirm） --- */
+/* 不再使用 backdrop-filter：弹窗在 top layer，对它的 backdrop 做实时采样在 Chromium
+   里需要额外的离屏合成，动画期间极易出现整屏级白/灰闪烁帧（Windows 窗口底色是白色，
+   一旦合成器晚一帧提交就露白）。面板本身不透明度 0.9，模糊本就几乎不可见。 */
 #modal-panel {
   /* dialog 只在 open 时显示，居中与顶层由浏览器负责（top-layer） */
   background: var(--panel-bg);
@@ -109,7 +114,6 @@
   border-radius: 6px;
   border: 1px solid var(--border-color);
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(5px);
   text-align: center;
   max-width: min(420px, 90vw);
 }
@@ -124,7 +128,6 @@
 
 #modal-panel::backdrop {
   background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(5px);
 }
 
 @keyframes modalIn {
@@ -194,7 +197,54 @@
   color: var(--accent-color);
 }
 
+/* --- 轻量提示（toast） --- */
+/* 「存档成功 / 读档成功 / 存档已删除」这类只需告知、无需确认的反馈走这里，
+   不再额外开一个模态弹窗——一次存档只剩一个确认框，避免连续两次弹窗。 */
+#app-toast {
+  position: fixed;
+  left: 50%;
+  /* 抬到底部行动区之上：否则会盖住「汝欲何为…」输入框 */
+  bottom: 6.5rem;
+  transform: translate(-50%, 0);
+  z-index: 2100;
+  max-width: min(30rem, 90vw);
+  padding: 0.7rem 1.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--panel-bg);
+  color: var(--text-color);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  text-align: center;
+  box-shadow: 0 8px 24px var(--shadow-color);
+  pointer-events: none;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 0.6rem);
+}
+
+/* 窄屏下行动区是「输入框 + 按钮」纵向排列，更高，toast 需要跟着抬高 */
+@media (max-width: 850px) {
+  #app-toast {
+    bottom: 10rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .toast-enter-active,
+  .toast-leave-active {
+    transition: none;
+  }
+
   .spinner,
   .dice-cup,
   #modal-panel[open] {

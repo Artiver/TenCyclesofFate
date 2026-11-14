@@ -1,8 +1,10 @@
+import { nextTick } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 import { pinia } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { setSocketAuthErrorHandler } from '@/stores/game'
+import { useUiStore } from '@/stores/ui'
 
 /**
  * 使用 hash 模式：后端对非 API 的未知路径会重定向到 `/`（main.py:not_found_handler），
@@ -31,9 +33,15 @@ const router = createRouter({
 /**
  * 首次导航时探测登录态（等价旧实现的「加载即 POST /api/game/init」），
  * 之后复用探测结果（`error` 态需显式调用 `auth.retry()` 才会重新探测）。
+ *
+ * 全屏遮罩只在「本页面生命周期内还没探测过登录态」时铺一次：登录成功后走的是已缓存的
+ * 认证状态，此时再铺遮罩就会盖在登录页上闪一下（旧实现无条件在 bootstrap 里挂遮罩）。
  */
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
+
+  if (auth.status === 'unknown') useUiStore(pinia).setFullscreenLoading(true)
+
   const status = await auth.ensureSession()
 
   // `error`（网络/5xx）与 `guest`（401）都回登录页，但登录页会区分提示并提供重试入口。
@@ -44,6 +52,12 @@ router.beforeEach(async (to) => {
     return { name: 'game' }
   }
   return true
+})
+
+/** 目标视图已经渲染出来再撤遮罩，避免「遮罩先消失 → 空白帧 → 新页面」的断裂感。 */
+router.afterEach(async () => {
+  await nextTick()
+  useUiStore(pinia).setFullscreenLoading(false)
 })
 
 /**

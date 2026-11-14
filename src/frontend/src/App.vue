@@ -3,6 +3,7 @@ import { onBeforeUnmount, watch } from 'vue'
 import { RouterView } from 'vue-router'
 
 import AppModal from '@/components/common/AppModal.vue'
+import AppToast from '@/components/common/AppToast.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import { useUiStore } from '@/stores/ui'
 
@@ -28,4 +29,5 @@ onBeforeUnmount(() => {
     <LoadingOverlay />
   </div>
   <AppModal />
+  <AppToast />
 </template>

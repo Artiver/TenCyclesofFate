@@ -85,6 +85,14 @@ body.has-scene-background #scene-background-image {
 }
 
 /* --- 共用控件 --- */
+/* 输入框是浅色底，必须用浅色 UA 配色，否则 :root 的 color-scheme: dark
+   会把原生文字/占位符/自动填充也变成浅色，白底上直接看不清。 */
+input,
+textarea,
+select {
+  color-scheme: light;
+}
+
 /* 输入框聚焦态：登录表单与行动输入共用 */
 .auth-form input:focus,
 #action-input:focus {

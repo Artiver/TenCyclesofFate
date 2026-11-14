@@ -3,6 +3,11 @@
  * 从旧 src/frontend/index.css 的 :root 原样迁移。
  */
 :root {
+  /* 让浏览器自身的底色（窗口/画布 base background、滚动条、原生控件）跟随深色主题：
+     Chromium 在 Windows 上的窗口底色默认是白色，合成器晚一帧提交新画面时就会露出白底，
+     也就是「整窗闪白」。声明深色配色后，这类空帧露出的是深色而不是白色。
+     注意：输入框仍是浅色底，需在 base.css 中单独声明 color-scheme: light。 */
+  color-scheme: dark;
   --bg-color: #3d2c1d; /* Dark Wood */
   --panel-bg: rgba(245, 247, 246, 0.9); /* White Jade with transparency */
   --text-color: #3a2e28;
