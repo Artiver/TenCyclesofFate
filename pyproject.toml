@@ -9,16 +9,16 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "aiofiles>=25.1.0",
-    "fastapi>=0.141.1",
-    "ijson>=3.5.1",
-    "jsonpatch>=1.33",
-    "libpass[bcrypt]>=1.9.3",
-    "mysql-connector-python>=26.7.0",
-    "openai>=3.1.0",
-    "pydantic-settings>=2.15.0",
+    "fastapi>=0.162.7",
+    "ijson>=3.6.0",
+    "jsonpatch>=1.47",
+    "libpass[bcrypt]>=1.9.4",
+    "mysql-connector-python>=26.10.0",
+    "openai>=3.51.0",
+    "pydantic-settings>=2.16.3",
     "python-jose[cryptography]>=3.5.0",
-    "uvicorn[standard]>=0.52.3",
-    "websockets>=17.0.1",
+    "uvicorn[standard]>=0.54.0",
+    "websockets>=17.4",
 ]
 
 [project.scripts]
